@@ -25,6 +25,9 @@ Examples of using the diverse functionalities package are located in
 Jupyter Notebooks at ``examples/``. We now briefly describe the
 functions.
 
+Data Exploration
+~~~~~~~~~~~~~~~~
+
 Credit Models
 ~~~~~~~~~~~~~
 
