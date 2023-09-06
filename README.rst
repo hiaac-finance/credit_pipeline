@@ -1,44 +1,57 @@
-# Credit Pipeline
+Credit Pipeline
+===============
 
-A general pipeline for Trustworthy Machine Learning on credit datasets, including functionalities for fairness, reject inference, and explainability.
-The package facilitates the development of more ethical algorithms at all the steps of the machine learning pipeline.
+A general pipeline for Trustworthy Machine Learning on credit datasets,
+including functionalities for fairness, reject inference, and
+explainability. The package facilitates the development of more ethical
+algorithms at all the steps of the machine learning pipeline.
 
-## Install
+Install
+-------
 
-- Clone the repository:
+-  Clone the repository:
 
-`git clone https://github.com/hiaac-finance/credit_pipeline.git`
+``git clone https://github.com/hiaac-finance/credit_pipeline.git``
 
-- Then, at the root folder of the repository, run the command to install the package and its dependencies:
+-  Then, at the root folder of the repository, run the command to
+   install the package and its dependencies:
 
-`pip install .`
+``pip install .``
 
+Usage
+-----
 
-## Usage
+Examples of using the diverse functionalities package are located in
+Jupyter Notebooks at ``examples/``. We now briefly describe the
+functions.
 
-Examples of using the diverse functionalities package are located in Jupyter Notebooks at `examples/`.  We now briefly describe the functions.
+Credit Models
+~~~~~~~~~~~~~
 
-### Credit Models
+-  TODO
 
-* TODO
-   
-### Fairness
+Fairness
+~~~~~~~~
 
-* TODO
+-  TODO
 
-### Reject Inference
+Reject Inference
+~~~~~~~~~~~~~~~~
 
-* TODO
-  
-### Explainability
+-  TODO
 
-* TODO
+Explainability
+~~~~~~~~~~~~~~
 
-## License
+-  TODO
 
-* TODO
+License
+-------
 
-## Contact
+-  TODO
 
-Dr. Marcos Medeiros Raimundo, project coordinator: mraimundo@ic.unicamp.br
+Contact
+-------
 
+Dr. Marcos Medeiros Raimundo, project coordinator:
+mraimundo@ic.unicamp.br
