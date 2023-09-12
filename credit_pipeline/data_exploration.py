@@ -493,13 +493,9 @@ def plot_categorical_features(df, categorical_features_lst):
         ax[0].set_title("Count plot of each level of the feature: " + feature)
 
         # Plot target distribution among levels
-        table_df = pd.crosstab(
-            df["TARGET"], df[feature], normalize=True
-        )
+        table_df = pd.crosstab(df["TARGET"], df[feature], normalize=True)
         table_df = table_df.div(table_df.sum(axis=0), axis=1)
-        table_df = pd.crosstab(
-            df["TARGET"], df[feature], normalize=True
-        )
+        table_df = pd.crosstab(df["TARGET"], df[feature], normalize=True)
         table_df = table_df.div(table_df.sum(axis=0), axis=1)
         table_df = table_df.transpose().reset_index()
         order_lst = table_df.sort_values(by=1)[feature].tolist()
@@ -565,9 +561,7 @@ def generate_binary_heatmap(df, binary_features_lst):
 
         i = idx % num_cols
         feature = binary_features_lst[idx]
-        table_df = pd.crosstab(
-            df["TARGET"], df[feature], normalize=True
-        )
+        table_df = pd.crosstab(df["TARGET"], df[feature], normalize=True)
 
         # Normalize statistics to remove target unbalance
         table_df = table_df.div(table_df.sum(axis=1), axis=0)
@@ -588,10 +582,8 @@ def generate_binary_heatmap(df, binary_features_lst):
     plt.show()
 
 
-def plot_mutual_categorical_features(
-    df, categorical_features_lst, target_variable
-):
-    """ Plot bar plots for each categorical feature with the mutual information between the feature and the target variable.
+def plot_mutual_categorical_features(df, categorical_features_lst, target_variable):
+    """Plot bar plots for each categorical feature with the mutual information between the feature and the target variable.
 
     :param DataFrame df: dataframe with data
     :param list categorical_features_lst: list with categorical features names
@@ -610,7 +602,7 @@ def plot_mutual_categorical_features(
         # Calculate mutual information
         X = pd.get_dummies(df[feature])
         y = df[target_variable]
-        mi_scores = mutual_info_classif(X, y) 
+        mi_scores = mutual_info_classif(X, y)
 
         # Plot mutual information
         ax = axes[row, col]
@@ -642,7 +634,7 @@ def get_mutual_info_cat_num(
     :param list cat_cols: list of categoric columns to use, defaults to "all"
     :param str target_col: name of target variable, defaults to "TARGET"
     :param int random_state: random state, defaults to 2023
-    :return ndarray: matrix with mutual information between numeric and categorical columns and the target variable 
+    :return ndarray: matrix with mutual information between numeric and categorical columns and the target variable
     """
     if not isinstance(numeric_cols, list) and numeric_cols == "all":
         numeric_cols = list_by_type(dataframe, ["float64"])
@@ -675,7 +667,6 @@ def get_mutual_info_cat_num(
     return mutual_info
 
 
-# @title Plot mutual information between numeric columns
 def plot_mutual_info_numeric_cat(
     mutual_info,
     numeric_cols,
