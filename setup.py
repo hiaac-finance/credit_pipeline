@@ -18,6 +18,7 @@ requirements = [
     "seaborn",
     "dash-bio",
     "chardet",
+    "fitter",
 ]
 
 test_requirements = [ ]
