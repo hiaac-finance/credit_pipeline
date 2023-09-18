@@ -11,7 +11,7 @@ with open('HISTORY.rst') as history_file:
     history = history_file.read()
 
 requirements = [ 
-    "pandas",
+    "pandas<2.1.0",
     "numpy",
     "scikit-learn",
     "matplotlib",
