@@ -39,12 +39,13 @@ def read_csv_encoded(path, filename):
     """
 
     the_file = os.path.join(path, filename)
-    rawdata = open(the_file, "rb").read()
-    result = chardet.detect(rawdata)
-    charenc = result["encoding"]
-
-    data = pd.read_csv(the_file, encoding=charenc, index_col=False)
-
+    try:
+        data = pd.read_csv(the_file, index_col=False)
+    except:
+        rawdata = open(the_file, 'rb').read()
+        result = chardet.detect(rawdata)
+        charenc = result['encoding']
+        data = pd.read_csv(the_file, encoding=charenc, index_col=False)
     return data
 
 
