@@ -390,7 +390,7 @@ def list_contin_cols(df):
     :param DataFrame df: dataframe to list continuous columns
     :return: list with continuous columns names
     """
-    numeric_cols = (df, ["float64"])
+    numeric_cols = list_by_type(df, ["float64"])
     contin_cols = []
     for col in numeric_cols:
         if len(df[col].unique()) > 20:
