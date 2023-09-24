@@ -407,7 +407,7 @@ def list_no_variation_cols(df, list_columns="all"):
     """
     if isinstance(list_columns, list):
         columns = list_columns
-    elif list_columns is None:
+    elif list_columns=="all":
         columns = list_by_type(df, ["float64"])
     columns = np.array(columns)
     idx = np.where(df[columns].nunique() == 1)[0]
@@ -885,7 +885,7 @@ def get_mutual_info_target(
     y = numeric_df[target_col]
     numeric_df.drop([target_col], axis=1, inplace=True)
 
-    mutual_info_list = mutual_info_classif(numeric_df, y, random_state=random_state)
+    mutual_info_list = mutual_info_classif(numeric_df, y.values, random_state=random_state)
 
     mutual_info_dict = {}
     dependent_cols = []
@@ -1504,11 +1504,11 @@ def generate_binary_heatmap(df, binary_features_lst):
     """
     binary_features_lst.sort()
 
-    num_rows = 6
+    num_rows = len(binary_features_lst) // 6 + (len(binary_features_lst) % 6 > 0)
     num_cols = 6
 
     fig, ax = plt.subplots(
-        num_rows, num_cols, sharex=False, sharey=False, figsize=(12, 12)
+        num_rows, num_cols, sharex=False, sharey=False, figsize=(12, num_rows * 2)
     )
     i = 0
     j = 0
