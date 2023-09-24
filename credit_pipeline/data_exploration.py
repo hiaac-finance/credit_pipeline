@@ -4,6 +4,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder
+from scipy.cluster.hierarchy import linkage, dendrogram
 from fitter import Fitter, get_common_distributions
 from scipy import stats
 import dash_bio
@@ -844,7 +845,7 @@ def get_mutual_info_target(
     :param dataframe: The DataFrame from which mutual information is to be calculated.
     :type dataframe: pandas.DataFrame
     :param list_columns: A list of column names to compute mutual information for. If set to 'all', all numeric
-                         columns in the DataFrame will be used. Default is 'all'.
+                         columns in the DataFrame will be used. Default is 'all'. The target column shouldn't be inside this list.
     :type list_columns: list or str
     :param target_col: Name of the target column with respect to which mutual information is to be calculated. Default is 'TARGET'.
     :type target_col: str
@@ -877,10 +878,9 @@ def get_mutual_info_target(
         columns = list_columns
     elif list_columns == "all":
         columns = list_by_type(dataframe, ["float64"])
+        columns.remove(target_col)
 
-    columns.append(target_col)
-
-    numeric_df = dataframe[columns].copy()
+    numeric_df = dataframe[columns + [target_col]].copy()
     numeric_df = numeric_df.dropna(how="any")
     y = numeric_df[target_col]
     numeric_df.drop([target_col], axis=1, inplace=True)
@@ -1159,14 +1159,19 @@ def plot_columns_dendrogram(
 
     # ... [rest of the function code]
 
+    notnan = ~corr_dataframe.isna().any()
+    corr_dataframe_ = corr_dataframe.loc[notnan, notnan]
+
     # Makes agglomerative clustering of the columns
-    Z = linkage(corr_dataframe, method)
+    Z = linkage(corr_dataframe_, method)
+
+
 
     # Plot dendrogram
     fig = plt.figure(figsize=figsize)
     dn = dendrogram(
         Z,
-        labels=corr_dataframe.columns,
+        labels=corr_dataframe_.columns,
         color_threshold=color_threshold,
         orientation="right",
         leaf_font_size=leaf_font_size,
@@ -1234,8 +1239,8 @@ def plot_mutual_info_target(
 
     sorted_cols = [columns[id] for id in sorted_id]
     sorted_mut_info = [
-        mutual_info_dep[col] for col in sorted_cols
-    ]  # TODO: fix this variable
+        mutual_info_dict[col] for col in sorted_cols
+    ] 
 
     sns.set(font_scale=fontscale)
     fig = plt.figure(figsize=figsize)
@@ -1346,9 +1351,12 @@ def plot_numeric_correlation(
     # Change plot defaults of fontscale
     sns.set(font_scale=clustermap_fontscale)
 
+    notnan = ~corr.isna().any()
+    corr_ = corr.loc[notnan, notnan]
+
     # Plot clustermap
     g = sns.clustermap(
-        corr, cmap=cmap, center=0, cbar_pos=cbar_pos, method="complete", figsize=figsize
+        corr_, cmap=cmap, center=0, cbar_pos=cbar_pos, method="complete", figsize=figsize
     )
     g.fig.suptitle(
         "Correlation between numeric columns", fontsize=title_fontsize, y=title_y
@@ -1363,7 +1371,6 @@ def plot_numeric_correlation(
 
 def plot_corr_clustergram(
     dataframe,
-    percentile_zero,
     color_threshold=1.0,
     height=950,
     width=1200,
@@ -1373,7 +1380,6 @@ def plot_corr_clustergram(
     """Plot iteractive clustergram of correlation matrix between columns.
 
     :param DataFrame dataframe: DataFrame containing the data.
-    :param float percentile_zero: percentile of data to color white
     :param float color_threshold: maximum linkage value for which unique colors are assigned to clusters, defaults to 1.0
     :param int height: height of figure, defaults to 950
     :param int width: width of figure, defaults to 1200
@@ -1381,11 +1387,20 @@ def plot_corr_clustergram(
     :param bool hide_labels: if should hid labels, defaults to True
     :return: graph object
     """
-    columns = list(dataframe.columns.values)
-    rows = list(dataframe.index)
+    notnan = ~dataframe.isna().any()
+    dataframe_ = dataframe.loc[notnan, notnan]
+    
+    columns = list(dataframe_.columns.values)
+    rows = list(dataframe_.index)
+
+  
+    values = dataframe_.to_numpy().tolist()
+    values = np.array([item for sublist in values for item in sublist])
+    percentile_zero = stats.percentileofscore(values, 0)/100
+    
 
     clustergram = dash_bio.Clustergram(
-        data=dataframe.loc[rows].values,
+        data=dataframe_.loc[rows].values,
         row_labels=rows,
         column_labels=columns,
         color_threshold={"row": color_threshold, "col": color_threshold},
@@ -1432,7 +1447,7 @@ def plot_categorical_features(df, categorical_features_lst):
     :param list categorical_features_lst: list of categorical features names
     """
     for feature in categorical_features_lst:
-        fig, ax = plt.subplots(1, 2, sharex=False, sharey=False, figsize=(20, 10))
+        fig, ax = plt.subplots(1, 2, sharex=False, sharey=False, figsize=(12, 6))
 
         # Plot levels distribution
         if df[feature].nunique() < 10:
@@ -1463,7 +1478,7 @@ def plot_categorical_features(df, categorical_features_lst):
             ax2 = sns.barplot(
                 x=table_df[feature],
                 y=table_df["value"] * 100,
-                hue=table_df["TARGET"],
+                hue=table_df["TARGET"].apply(str),
                 ax=ax[1],
                 order=order_lst,
             )
@@ -1512,6 +1527,8 @@ def generate_binary_heatmap(df, binary_features_lst):
     )
     i = 0
     j = 0
+    if num_rows == 1:
+      ax = ax.reshape(1, -1)
 
     for idx in range(len(binary_features_lst)):
         if idx % num_cols == 0 and idx != 0:
