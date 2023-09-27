@@ -14,9 +14,7 @@ import optuna
 import credit_pipeline.data_exploration as dex
 
 
-
-
-def need_EBE(dataframe, cat_cols, crit = 3):
+def need_EBE(dataframe, cat_cols, crit=3):
     need_ebe = []
     dont_ebe = []
     for c in cat_cols:
@@ -26,24 +24,28 @@ def need_EBE(dataframe, cat_cols, crit = 3):
             dont_ebe.append(c)
     return need_ebe, dont_ebe
 
-def create_pipeline(X, y, classifier, do_EBE = True, crit = 3, ):
-    num_cols = dex.list_by_type(X, ['float64', 'int32', 'int64'])
-    cat_cols = dex.list_by_type(X, ['O'])
+
+def create_pipeline(
+    X,
+    y,
+    classifier,
+    do_EBE=True,
+    crit=3,
+):
+    num_cols = dex.list_by_type(X, ["float64", "int32", "int64"])
+    cat_cols = dex.list_by_type(X, ["O"])
     if do_EBE:
         do_ebe_cols, dont_ebe_cols = need_EBE(X, cat_cols, crit)
     else:
         do_ebe_cols, dont_ebe_cols = [], cat_cols
 
     num_pipe = Pipeline(
-        steps=[
-            ("imputer", SimpleImputer(strategy="median")),
-            ("ss", StandardScaler())
-        ]
+        steps=[("imputer", SimpleImputer(strategy="median")), ("ss", StandardScaler())]
     )
 
     cat_pipe = Pipeline(
         steps=[
-            ("imputer", SimpleImputer(strategy='most_frequent')),
+            ("imputer", SimpleImputer(strategy="most_frequent")),
             ("encoder", OneHotEncoder(handle_unknown="ignore")),
         ]
     )
@@ -53,10 +55,7 @@ def create_pipeline(X, y, classifier, do_EBE = True, crit = 3, ):
             self.k = k
 
         def fit(self, X, y):
-            aux_dict = (pd.Series(y)
-                        .groupby(X)
-                        .agg(["mean", "count"])
-                        .to_dict())
+            aux_dict = pd.Series(y).groupby(X).agg(["mean", "count"]).to_dict()
             self._aux_dict = aux_dict
             self._ave = y.mean()
             self._count = y.count()
@@ -64,14 +63,16 @@ def create_pipeline(X, y, classifier, do_EBE = True, crit = 3, ):
 
         def transform(self, X, y=None):
             X_copy = X.copy()
-            fit_unique = set(self._aux_dict['mean'].keys())
+            fit_unique = set(self._aux_dict["mean"].keys())
             X_unique = set(X.unique())
             unknown_values = X_unique - fit_unique
             X_copy.loc[X_copy.isin(unknown_values)] = np.nan
 
-            group_ave = X_copy.replace(self._aux_dict['mean'])
-            group_count = X_copy.replace(self._aux_dict['count'])
-            Xt = ((group_ave * group_count + self.k * self._ave) / (self.k + group_count)).values.reshape(-1, 1)
+            group_ave = X_copy.replace(self._aux_dict["mean"])
+            group_count = X_copy.replace(self._aux_dict["count"])
+            Xt = (
+                (group_ave * group_count + self.k * self._ave) / (self.k + group_count)
+            ).values.reshape(-1, 1)
 
             return Xt
 
@@ -88,9 +89,7 @@ def create_pipeline(X, y, classifier, do_EBE = True, crit = 3, ):
         return pipe
 
     ebe_pipe = FeatureUnion(
-        transformer_list=[
-                (col, build_ebe_pipeline(col)) for col in do_ebe_cols
-        ]
+        transformer_list=[(col, build_ebe_pipeline(col)) for col in do_ebe_cols]
     )
 
     preprocessor = ColumnTransformer(
@@ -98,23 +97,23 @@ def create_pipeline(X, y, classifier, do_EBE = True, crit = 3, ):
             ("num", num_pipe, num_cols),
             ("cat", cat_pipe, dont_ebe_cols),
             ("ebe", ebe_pipe, do_ebe_cols),
-
         ]
     )
 
     pipeline = Pipeline(
         steps=[
             ("preprocessor", preprocessor),
-            ("imputer", SimpleImputer(strategy='most_frequent')),
-            ("classifier", classifier)
+            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("classifier", classifier),
         ]
     )
 
     return pipeline
 
 
-#@title Objective function for optimizing machine learning models using Optuna.
-def objective(trial, model_class, param_space, X_train, y_train, X_val, y_val, seed_number = 0):
+def objective(
+    trial, model_class, param_space, X_train, y_train, X_val, y_val, seed_number=0
+):
     """
     Objective function for optimizing machine learning models using Optuna.
 
@@ -157,30 +156,39 @@ def objective(trial, model_class, param_space, X_train, y_train, X_val, y_val, s
     # Extract hyperparameters from the parameter space
     params = {}
     for name, values in param_space.items():
-        if values['type'] == 'int':
-            values_cp = {n:v for n, v in values.items() if n!='type'}
+        if values["type"] == "int":
+            values_cp = {n: v for n, v in values.items() if n != "type"}
             params[name] = trial.suggest_int(name, **values_cp)
-        elif values['type'] == 'categorical':
-            values_cp = {n:v for n, v in values.items() if n!='type'}
+        elif values["type"] == "categorical":
+            values_cp = {n: v for n, v in values.items() if n != "type"}
             params[name] = trial.suggest_categorical(name, **values_cp)
-        elif values['type'] == 'float':  # corrected this line
-            values_cp = {n:v for n, v in values.items() if n!='type'}
+        elif values["type"] == "float":  # corrected this line
+            values_cp = {n: v for n, v in values.items() if n != "type"}
             params[name] = trial.suggest_float(name, **values_cp)
 
-    params['random_state'] = seed_number
+    params["random_state"] = seed_number
 
     # Initialize and train the model
     model = create_pipeline(X_train, y_train, model_class(**params))
     model.fit(X_train, y_train)
 
     # Predict and evaluate the model
-    predictions = model.predict_proba(X_val)[:,1]
+    predictions = model.predict_proba(X_val)[:, 1]
     score = roc_auc_score(y_val, predictions)
 
     return score
 
 
-def optimize_model(model_class, param_space, X_train, y_train, X_val, y_val, n_trials=100, seed_number = 0):
+def optimize_model(
+    model_class,
+    param_space,
+    X_train,
+    y_train,
+    X_val,
+    y_val,
+    n_trials=100,
+    seed_number=0,
+):
     """
     Optimize hyperparameters of a machine learning model using Optuna.
 
@@ -221,8 +229,20 @@ def optimize_model(model_class, param_space, X_train, y_train, X_val, y_val, n_t
         Ensure that the required libraries (`optuna`, desired machine learning model, and metrics) are installed before using this function.
     """
     sampler = TPESampler(seed=seed_number)
-    study = optuna.create_study(direction='maximize', sampler=sampler)
-    study.optimize(lambda trial: objective(trial, model_class, param_space, X_train, y_train, X_val, y_val, seed_number = 0), n_trials=n_trials)
+    study = optuna.create_study(direction="maximize", sampler=sampler)
+    study.optimize(
+        lambda trial: objective(
+            trial,
+            model_class,
+            param_space,
+            X_train,
+            y_train,
+            X_val,
+            y_val,
+            seed_number=0,
+        ),
+        n_trials=n_trials,
+    )
 
     return study
 
@@ -231,10 +251,21 @@ def optimize_models(models, param_spaces, X_train, y_train, X_val, y_val, n_tria
     optimized_models = {}
     for model_name, model_class in models.items():
         print(f"Optimizing {model_name}...")
-        study = optimize_model(model_class, param_spaces[model_name], X_train, y_train, X_val, y_val, n_trials)
+        study = optimize_model(
+            model_class,
+            param_spaces[model_name],
+            X_train,
+            y_train,
+            X_val,
+            y_val,
+            n_trials,
+        )
         best_params = study.best_params
         print(f"Best parameters for {model_name}: {best_params}")  # Diagnostic print
         optimized_model = model_class(**best_params)
-        print(f"Optimized model instance for {model_name}: {optimized_model}")  # Diagnostic print
+        print(
+            f"Optimized model instance for {model_name}: {optimized_model}"
+        )  # Diagnostic print
+        optimized_model.fit(X_train, y_train)
         optimized_models[model_name] = optimized_model
     return optimized_models
