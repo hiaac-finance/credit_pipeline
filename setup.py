@@ -19,6 +19,8 @@ requirements = [
     "dash-bio",
     "chardet",
     "fitter",
+    "optuna",
+    "lightgbm",
 ]
 
 test_requirements = [ ]
