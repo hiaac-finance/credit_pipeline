@@ -21,6 +21,10 @@ requirements = [
     "fitter",
     "optuna",
     "lightgbm",
+    "lime",
+    "shap",
+    "cfmining @ git+https://github.com/visual-ds/cfmining",
+    "xxhash",
 ]
 
 test_requirements = [ ]
