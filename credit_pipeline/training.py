@@ -244,7 +244,10 @@ def optimize_model(
         n_trials=n_trials,
     )
 
-    return study
+    best_params = study.best_params
+    model = model_class(**best_params)
+    model.fit(X_train, y_train)
+    return study, model
 
 
 def optimize_models(models, param_spaces, X_train, y_train, X_val, y_val, n_trials=50):
