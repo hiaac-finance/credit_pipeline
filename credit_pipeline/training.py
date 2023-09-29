@@ -29,7 +29,7 @@ def create_pipeline(
     X,
     y,
     classifier,
-    do_EBE=True,
+    do_EBE=False,
     crit=3,
 ):
     num_cols = dex.list_by_type(X, ["float64", "int32", "int64"])
@@ -245,7 +245,7 @@ def optimize_model(
     )
 
     best_params = study.best_params
-    model = model_class(**best_params)
+    model = create_pipeline(X_train, y_train, model_class(**best_params))
     model.fit(X_train, y_train)
     return study, model
 
