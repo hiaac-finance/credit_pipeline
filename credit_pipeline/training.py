@@ -7,7 +7,16 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline, FeatureUnion
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, FunctionTransformer
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import (
+    roc_auc_score,
+    balanced_accuracy_score,
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    brier_score_loss,
+    roc_curve,
+)
 from optuna.samplers import TPESampler
 import optuna
 
@@ -272,3 +281,89 @@ def optimize_models(models, param_spaces, X_train, y_train, X_val, y_val, n_tria
         optimized_model.fit(X_train, y_train)
         optimized_models[model_name] = optimized_model
     return optimized_models
+
+
+def ks_threshold(y_true, y_score):
+    fpr, tpr, thresholds = roc_curve(y_true, y_score)
+    opt_threshold = thresholds[np.argmax(tpr - fpr)]
+    return opt_threshold
+
+
+def get_metrics(name_model_dict, X, y, threshold=0.5):
+    models_dict = {}
+    for name, model in name_model_dict.items():
+        if type(model) == list:
+            y_prob = model[0].predict_proba(X)[:, 1]
+            threshold_model = model[1]
+            y_pred = (y_prob >= threshold_model).astype("int")
+        else:
+            y_prob = model.predict_proba(X)[:, 1]
+            y_pred = (y_prob >= threshold).astype("int")
+
+        models_dict[name] = (y_pred, y_prob)
+
+    def get_metrics_df(
+        models_dict,
+        y_true,
+    ):
+        metrics_dict = {
+            "AUC": (lambda x: roc_auc_score(y_true, x), False),
+            "Balanced Accuracy": (lambda x: balanced_accuracy_score(y_true, x), True),
+            "Accuracy": (lambda x: accuracy_score(y_true, x), True),
+            "Precision": (lambda x: precision_score(y_true, x, zero_division=0), True),
+            "Recall": (lambda x: recall_score(y_true, x), True),
+            "F1": (lambda x: f1_score(y_true, x), True),
+            "Brier Score": (lambda x: brier_score_loss(y_true, x), False),
+        }
+        df_dict = {}
+        for metric_name, (metric_func, use_preds) in metrics_dict.items():
+            df_dict[metric_name] = [
+                metric_func(preds) if use_preds else metric_func(scores)
+                for model_name, (preds, scores) in models_dict.items()
+            ]
+        return pd.DataFrame.from_dict(
+            df_dict, orient="index", columns=models_dict.keys()
+        ).T
+
+    return get_metrics_df(models_dict, y)
+
+
+def get_fairness_metrics(name_model_dict, X, y, z, threshold=0.5):
+    models_dict = {}
+    for name, model in name_model_dict.items():
+        if type(model) == list:
+            y_prob = model[0].predict_proba(X)[:, 1]
+            threshold_model = model[1]
+            y_pred = (y_prob >= threshold_model).astype("int")
+        else:
+            y_prob = model.predict_proba(X)[:, 1]
+            y_pred = (y_prob >= threshold).astype("int")
+
+        models_dict[name] = y_pred
+
+    def get_metrics_df(
+        models_dict,
+        y_true,
+    ):
+        df_dict = {}
+        df_dict["SPD"] = [
+            np.mean(preds[z == 1]) - np.mean(preds[z == 0])
+            for model_name, preds in models_dict.items()
+        ]
+        df_dict["EOD"] = [
+            recall_score(y_true[z == 1], preds[z == 1])
+            - recall_score(y_true[z == 0], preds[z == 0])
+            for model_name, preds in models_dict.items()
+        ]
+        df_dict["GMA"] = [
+            np.sqrt(
+                accuracy_score(y_true[z == 1], preds[z == 1])
+                * accuracy_score(y_true[z == 0], preds[z == 0])
+            )
+            for model_name, preds in models_dict.items()
+        ]
+        return pd.DataFrame.from_dict(
+            df_dict, orient="index", columns=models_dict.keys()
+        ).T
+
+    return get_metrics_df(models_dict, y)
