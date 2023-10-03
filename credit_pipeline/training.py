@@ -52,7 +52,7 @@ def create_pipeline(
     classifier,
     do_EBE=False,
     crit=3,
-    ):  
+):
     num_cols = dex.list_by_type(X, ["float64", "int32", "int64"])
     cat_cols = dex.list_by_type(X, ["O"])
     if do_EBE:
@@ -361,51 +361,54 @@ def get_fairness_metrics(name_model_dict, X, y, z, benefit_label=1, threshold=0.
             y_prob = model.predict_proba(X)[:, 1]
             y_pred = (y_prob >= threshold).astype("int")
 
-        models_dict[name] = (y_pred == benefit_label).astype("float")
+        models_dict[name] = (
+            (y == benefit_label).astype("float"),
+            (y_pred == benefit_label).astype("float"),
+        )
 
     def get_metrics_df(models_dict):
         df_dict = {}
         df_dict["DPD"] = [
             np.mean(preds[z == 1]) - np.mean(preds[z == 0])
-            for preds in models_dict.values()
+            for ground, preds in models_dict.values()
         ]
         df_dict["EOD"] = [
-            recall_score(y[z == 1], preds[z == 1])
-            - recall_score(y[z == 0], preds[z == 0])
-            for preds in models_dict.values()
+            recall_score(ground[z == 1], preds[z == 1])
+            - recall_score(ground[z == 0], preds[z == 0])
+            for ground, preds in models_dict.values()
         ]
         df_dict["AOD"] = [
             0.5
             * (
-                recall_score(y[z == 1], preds[z == 1])
-                - recall_score(y[z == 0], preds[z == 0])
+                recall_score(ground[z == 1], preds[z == 1])
+                - recall_score(ground[z == 0], preds[z == 0])
             )
             + 0.5
             * (
-                false_positive_rate(y[z == 1], preds[z == 1])
-                - false_positive_rate(y[z == 0], preds[z == 0])
+                false_positive_rate(ground[z == 1], preds[z == 1])
+                - false_positive_rate(ground[z == 0], preds[z == 0])
             )
-            for preds in models_dict.values()
+            for ground, preds in models_dict.values()
         ]
         df_dict["APVD"] = [
             0.5
             * (
-                recall_score(preds[z == 1], y[z == 1])
-                - recall_score(preds[z == 0], y[z == 0])
+                recall_score(preds[z == 1], ground[z == 1])
+                - recall_score(preds[z == 0], ground[z == 0])
             )
             + 0.5
             * (
-                false_positive_rate(preds[z == 1], y[z == 1])
-                - false_positive_rate(preds[z == 0], y[z == 0])
+                false_positive_rate(preds[z == 1], ground[z == 1])
+                - false_positive_rate(preds[z == 0], ground[z == 0])
             )
-            for preds in models_dict.values()
+            for ground, preds in models_dict.values()
         ]
         df_dict["GMA"] = [
             np.sqrt(
-                accuracy_score(y[z == 1], preds[z == 1])
-                * accuracy_score(y[z == 0], preds[z == 0])
+                accuracy_score(ground[z == 1], preds[z == 1])
+                * accuracy_score(ground[z == 0], preds[z == 0])
             )
-            for preds in models_dict.values()
+            for ground, preds in models_dict.values()
         ]
         return pd.DataFrame.from_dict(
             df_dict, orient="index", columns=models_dict.keys()
