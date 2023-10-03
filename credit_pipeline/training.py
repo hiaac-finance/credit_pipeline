@@ -16,11 +16,23 @@ from sklearn.metrics import (
     f1_score,
     brier_score_loss,
     roc_curve,
+    confusion_matrix,
 )
 from optuna.samplers import TPESampler
 import optuna
 
 import credit_pipeline.data_exploration as dex
+
+
+def false_positive_rate(y_true, y_pred):
+    """Calculate false positive rate.
+
+    :param y_true: real labels
+    :param y_pred: prediction labels
+    :return: float in [0,1] with false positive rate
+    """
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+    return fp / (fp + tn)
 
 
 def need_EBE(dataframe, cat_cols, crit=3):
@@ -40,7 +52,7 @@ def create_pipeline(
     classifier,
     do_EBE=False,
     crit=3,
-):
+    ):  
     num_cols = dex.list_by_type(X, ["float64", "int32", "int64"])
     cat_cols = dex.list_by_type(X, ["O"])
     if do_EBE:
@@ -328,7 +340,17 @@ def get_metrics(name_model_dict, X, y, threshold=0.5):
     return get_metrics_df(models_dict, y)
 
 
-def get_fairness_metrics(name_model_dict, X, y, z, threshold=0.5):
+def get_fairness_metrics(name_model_dict, X, y, z, benefit_label=1, threshold=0.5):
+    """Calculate fairness metrics for a set of models. The metrics are returned in a dataframe.
+
+    :param name_model_dict: dict with model names as keys and models as values
+    :param X: dataframe with features
+    :param y: ground truth labels
+    :param z: binary protected attributed, unprivileged group is 1
+    :param benefit_label: label of benefit prediction, defaults to 1
+    :param threshold: threshold to transform scores to binary prediction, if is going to use a threshold for each model, the values for name_model_dict should be tuples with model as first value and thershold a secondary vale, defaults to 0.5
+    :return: dataframe with columns as fairness metrics and rows as models
+    """
     models_dict = {}
     for name, model in name_model_dict.items():
         if type(model) == list:
@@ -339,31 +361,54 @@ def get_fairness_metrics(name_model_dict, X, y, z, threshold=0.5):
             y_prob = model.predict_proba(X)[:, 1]
             y_pred = (y_prob >= threshold).astype("int")
 
-        models_dict[name] = y_pred
+        models_dict[name] = (y_pred == benefit_label).astype("float")
 
-    def get_metrics_df(
-        models_dict,
-        y_true,
-    ):
+    def get_metrics_df(models_dict):
         df_dict = {}
-        df_dict["SPD"] = [
+        df_dict["DPD"] = [
             np.mean(preds[z == 1]) - np.mean(preds[z == 0])
-            for model_name, preds in models_dict.items()
+            for preds in models_dict.values()
         ]
         df_dict["EOD"] = [
-            recall_score(y_true[z == 1], preds[z == 1])
-            - recall_score(y_true[z == 0], preds[z == 0])
-            for model_name, preds in models_dict.items()
+            recall_score(y[z == 1], preds[z == 1])
+            - recall_score(y[z == 0], preds[z == 0])
+            for preds in models_dict.values()
+        ]
+        df_dict["AOD"] = [
+            0.5
+            * (
+                recall_score(y[z == 1], preds[z == 1])
+                - recall_score(y[z == 0], preds[z == 0])
+            )
+            + 0.5
+            * (
+                false_positive_rate(y[z == 1], preds[z == 1])
+                - false_positive_rate(y[z == 0], preds[z == 0])
+            )
+            for preds in models_dict.values()
+        ]
+        df_dict["APVD"] = [
+            0.5
+            * (
+                recall_score(preds[z == 1], y[z == 1])
+                - recall_score(preds[z == 0], y[z == 0])
+            )
+            + 0.5
+            * (
+                false_positive_rate(preds[z == 1], y[z == 1])
+                - false_positive_rate(preds[z == 0], y[z == 0])
+            )
+            for preds in models_dict.values()
         ]
         df_dict["GMA"] = [
             np.sqrt(
-                accuracy_score(y_true[z == 1], preds[z == 1])
-                * accuracy_score(y_true[z == 0], preds[z == 0])
+                accuracy_score(y[z == 1], preds[z == 1])
+                * accuracy_score(y[z == 0], preds[z == 0])
             )
-            for model_name, preds in models_dict.items()
+            for preds in models_dict.values()
         ]
         return pd.DataFrame.from_dict(
             df_dict, orient="index", columns=models_dict.keys()
         ).T
 
-    return get_metrics_df(models_dict, y)
+    return get_metrics_df(models_dict)
