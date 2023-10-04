@@ -25,6 +25,7 @@ requirements = [
     "shap",
     "cfmining @ git+https://github.com/visual-ds/cfmining",
     "xxhash",
+    "fairlearn",
 ]
 
 test_requirements = [ ]
