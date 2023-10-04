@@ -340,30 +340,20 @@ def get_metrics(name_model_dict, X, y, threshold=0.5):
     return get_metrics_df(models_dict, y)
 
 
-def get_fairness_metrics(name_model_dict, X, y, z, benefit_label=1, threshold=0.5):
+def get_fairness_metrics(models_dict, y, z, benefit_class=1):
     """Calculate fairness metrics for a set of models. The metrics are returned in a dataframe.
 
-    :param name_model_dict: dict with model names as keys and models as values
-    :param X: dataframe with features
+    :param model_dict: dict with model names as keys and classification as values (not score)
     :param y: ground truth labels
     :param z: binary protected attributed, unprivileged group is 1
     :param benefit_label: label of benefit prediction, defaults to 1
     :param threshold: threshold to transform scores to binary prediction, if is going to use a threshold for each model, the values for name_model_dict should be tuples with model as first value and thershold a secondary vale, defaults to 0.5
     :return: dataframe with columns as fairness metrics and rows as models
     """
-    models_dict = {}
-    for name, model in name_model_dict.items():
-        if type(model) == list:
-            y_prob = model[0].predict_proba(X)[:, 1]
-            threshold_model = model[1]
-            y_pred = (y_prob >= threshold_model).astype("int")
-        else:
-            y_prob = model.predict_proba(X)[:, 1]
-            y_pred = (y_prob >= threshold).astype("int")
-
+    for name, y_pred in models_dict.items():
         models_dict[name] = (
-            (y == benefit_label).astype("float"),
-            (y_pred == benefit_label).astype("float"),
+            (y == benefit_class).astype("float"),
+            (y_pred == benefit_class).astype("float"),
         )
 
     def get_metrics_df(models_dict):
