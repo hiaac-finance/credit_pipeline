@@ -401,6 +401,10 @@ def get_fairness_metrics(models_dict, y, z, benefit_class=1):
             )
             for ground, preds in models_dict_benefit.values()
         ]
+        df_dict["balanced_accuracy"] = [
+            balanced_accuracy_score(ground, preds)
+            for ground, preds in models_dict_benefit.values()
+        ]
         return pd.DataFrame.from_dict(
             df_dict, orient="index", columns=models_dict_benefit.keys()
         ).T
