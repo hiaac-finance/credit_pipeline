@@ -350,22 +350,23 @@ def get_fairness_metrics(models_dict, y, z, benefit_class=1):
     :param threshold: threshold to transform scores to binary prediction, if is going to use a threshold for each model, the values for name_model_dict should be tuples with model as first value and thershold a secondary vale, defaults to 0.5
     :return: dataframe with columns as fairness metrics and rows as models
     """
+    models_dict_benefit = {}
     for name, y_pred in models_dict.items():
-        models_dict[name] = (
+        models_dict_benefit[name] = (
             (y == benefit_class).astype("float"),
             (y_pred == benefit_class).astype("float"),
         )
 
-    def get_metrics_df(models_dict):
+    def get_metrics_df(models_dict_benefit):
         df_dict = {}
         df_dict["DPD"] = [
             np.mean(preds[z == 1]) - np.mean(preds[z == 0])
-            for ground, preds in models_dict.values()
+            for ground, preds in models_dict_benefit.values()
         ]
         df_dict["EOD"] = [
             recall_score(ground[z == 1], preds[z == 1])
             - recall_score(ground[z == 0], preds[z == 0])
-            for ground, preds in models_dict.values()
+            for ground, preds in models_dict_benefit.values()
         ]
         df_dict["AOD"] = [
             0.5
@@ -378,7 +379,7 @@ def get_fairness_metrics(models_dict, y, z, benefit_class=1):
                 false_positive_rate(ground[z == 1], preds[z == 1])
                 - false_positive_rate(ground[z == 0], preds[z == 0])
             )
-            for ground, preds in models_dict.values()
+            for ground, preds in models_dict_benefit.values()
         ]
         df_dict["APVD"] = [
             0.5
@@ -391,17 +392,17 @@ def get_fairness_metrics(models_dict, y, z, benefit_class=1):
                 false_positive_rate(preds[z == 1], ground[z == 1])
                 - false_positive_rate(preds[z == 0], ground[z == 0])
             )
-            for ground, preds in models_dict.values()
+            for ground, preds in models_dict_benefit.values()
         ]
         df_dict["GMA"] = [
             np.sqrt(
                 accuracy_score(ground[z == 1], preds[z == 1])
                 * accuracy_score(ground[z == 0], preds[z == 0])
             )
-            for ground, preds in models_dict.values()
+            for ground, preds in models_dict_benefit.values()
         ]
         return pd.DataFrame.from_dict(
-            df_dict, orient="index", columns=models_dict.keys()
+            df_dict, orient="index", columns=models_dict_benefit.keys()
         ).T
 
-    return get_metrics_df(models_dict)
+    return get_metrics_df(models_dict_benefit)

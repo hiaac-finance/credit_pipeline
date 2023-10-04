@@ -27,6 +27,8 @@ requirements = [
     "xxhash",
     "fairlearn",
     "fairgbm",
+    "aif360",
+    "scikit-lego[cxvpy]",
 ]
 
 test_requirements = [ ]
