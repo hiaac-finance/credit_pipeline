@@ -26,6 +26,7 @@ requirements = [
     "cfmining @ git+https://github.com/visual-ds/cfmining",
     "xxhash",
     "fairlearn",
+    "fairgbm",
 ]
 
 test_requirements = [ ]
