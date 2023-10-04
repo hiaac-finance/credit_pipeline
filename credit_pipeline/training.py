@@ -249,6 +249,7 @@ def optimize_model(
     Note:
         Ensure that the required libraries (`optuna`, desired machine learning model, and metrics) are installed before using this function.
     """
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
     sampler = TPESampler(seed=seed_number)
     study = optuna.create_study(direction="maximize", sampler=sampler)
     study.optimize(
@@ -260,13 +261,17 @@ def optimize_model(
             y_train,
             X_val,
             y_val,
-            seed_number=0,
+            seed_number=seed_number,
         ),
         n_trials=n_trials,
+        show_progress_bar=True,
     )
 
     best_params = study.best_params
-    model = create_pipeline(X_train, y_train, model_class(**best_params))
+    model = create_pipeline(X_train, y_train, model_class(
+        random_state = seed_number,
+        **best_params
+    ))
     model.fit(X_train, y_train)
     return study, model
 
