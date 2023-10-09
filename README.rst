@@ -22,36 +22,42 @@ Usage
 -----
 
 Examples of using the diverse functionalities package are located in
-Jupyter Notebooks at ``examples/``. We now briefly describe the
-functions.
+Jupyter Notebooks at ``examples/``. The necessary data is also presented in the folder ``data/``.
+ We now briefly describe the functions.
 
 Data Exploration
 ~~~~~~~~~~~~~~~~
 
+Exemplified at the file ``examples/data_exploration.ipynb``, a diverse set of functions is present that is able to deal with
+missing values, identify categorical and numerical features, and more sophisticated tasks such as identifying outliers, looking
+for correlation, calculating mutual information.
+
 Credit Models
 ~~~~~~~~~~~~~
 
--  TODO
+Considering three open credit scoring datasets (Home Credit, Taiwan, and German), we provide documentation of our experiments
+using Logistic Regression, Neural Networks, Random Forest, and Gradient Boosting. Each experiment is located in Python notebooks
+within the folder ``examples/`` with the name of the dataset.
 
 Fairness
 ~~~~~~~~
 
--  TODO
+Our code presents a comparison of a pre-processing, three in-processing, and one post-processing fairness metric.
+The mitigation techniques are performed with all three datasets and inside each of the notebooks in ``examples/`` folder.
 
 Reject Inference
 ~~~~~~~~~~~~~~~~
 
--  TODO
+Our code also presents a comparison of different reject inference techniques, with the approach of augmentation, extrapolation
+, and label spreading. These experiments are present in the notebook ``examples/reject_inference.ipynb`` only with the HomeCredit dataset.
+This was necessary as a special data treatment was needed to simulate a scenario of reject inference.
 
 Explainability
 ~~~~~~~~~~~~~~
 
--  TODO
+Explainability experiments were performed using the German dataset and are localized in the notebook ``examples/german.ipynb``.
+Global and local interpretability techniques were used to demonstrate the advantages and pitfalls of each one.
 
-License
--------
-
--  TODO
 
 Contact
 -------
