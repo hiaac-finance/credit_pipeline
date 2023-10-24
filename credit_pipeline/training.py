@@ -3,9 +3,13 @@ import pandas as pd
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline, FeatureUnion
-from sklearn.preprocessing import StandardScaler, OneHotEncoder, FunctionTransformer
+from sklearn.compose import ColumnTransformer, make_column_selector
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import (
+    StandardScaler,
+    OneHotEncoder,
+    OrdinalEncoder,
+)
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import (
     roc_auc_score,
@@ -46,94 +50,133 @@ def need_EBE(dataframe, cat_cols, crit=3):
     return need_ebe, dont_ebe
 
 
+def columns_by_type(dataframe, types_cols=["numeric"], debug=False):
+    list_cols = []
+    if types_cols == ["numeric"]:
+        types_cols = ["b", "i", "u", "f", "c"]
+    elif types_cols == ["categorical"]:
+        types_cols = ["O", "S", "U"]
+
+    # Iterate through each column in the DataFrame
+    for c in dataframe.columns:
+        col = dataframe[c]
+
+        # Check if the column's data type matches any of the specified data types
+        if (col.dtype.kind in types_cols) or (col.dtype in types_cols):
+            list_cols.append(c)
+
+            # Print debugging information if debug flag is enabled
+            if debug:
+                print(c, " : ", col.dtype)
+                print(col.unique()[:10])
+                print("---------------")
+
+    return list_cols
+
+
 def create_pipeline(
     X,
     y,
-    classifier,
+    classifier=None,
+    cat_cols="infer",
+    onehot=True,
+    onehotdrop=False,
+    normalize=True,
     do_EBE=False,
     crit=3,
 ):
-    num_cols = dex.list_by_type(X, ["float64", "int32", "int64"])
-    cat_cols = dex.list_by_type(X, ["O"])
+    if cat_cols == "infer":
+        num_cols = columns_by_type(X, ["numeric"])
+        cat_cols = columns_by_type(X, ["categorical"])
+    else:
+        num_cols = X.columns.difference(cat_cols).tolist()
+
+    # check if need EBE
     if do_EBE:
-        do_ebe_cols, dont_ebe_cols = need_EBE(X, cat_cols, crit)
+        do_ebe_cols = []
+        dont_ebe_cols = []
+        for c in cat_cols:
+            if len(X[c].unique()) >= crit:
+                do_ebe_cols.append(c)
+            else:
+                dont_ebe_cols.append(c)
     else:
         do_ebe_cols, dont_ebe_cols = [], cat_cols
 
-    num_pipe = Pipeline(
-        steps=[("imputer", SimpleImputer(strategy="median")), ("ss", StandardScaler())]
+    # 1 Fill NaNs
+    numeric_nan_fill_transformer = Pipeline(
+        [("imputer", SimpleImputer(strategy="mean"))]
     )
-
-    cat_pipe = Pipeline(
-        steps=[
-            ("imputer", SimpleImputer(strategy="most_frequent")),
-            ("encoder", OneHotEncoder(handle_unknown="ignore")),
-        ]
+    categorical_nan_fill_transformer = Pipeline(
+        [("imputer", SimpleImputer(strategy="most_frequent"))]
     )
-
-    class EBE(BaseEstimator, TransformerMixin):
-        def __init__(self, k=None):
-            self.k = k
-
-        def fit(self, X, y):
-            aux_dict = pd.Series(y).groupby(X).agg(["mean", "count"]).to_dict()
-            self._aux_dict = aux_dict
-            self._ave = y.mean()
-            self._count = y.count()
-            return self
-
-        def transform(self, X, y=None):
-            X_copy = X.copy()
-            fit_unique = set(self._aux_dict["mean"].keys())
-            X_unique = set(X.unique())
-            unknown_values = X_unique - fit_unique
-            X_copy.loc[X_copy.isin(unknown_values)] = np.nan
-
-            group_ave = X_copy.replace(self._aux_dict["mean"])
-            group_count = X_copy.replace(self._aux_dict["count"])
-            Xt = (
-                (group_ave * group_count + self.k * self._ave) / (self.k + group_count)
-            ).values.reshape(-1, 1)
-
-            return Xt
-
-    def selector(X, col):
-        return X[col]
-
-    def build_ebe_pipeline(col, k=1):
-        pipe = Pipeline(
-            [
-                ("sel", FunctionTransformer(selector, kw_args={"col": col})),
-                ("ebe", EBE(k=k)),
-            ]
-        )
-        return pipe
-
-    ebe_pipe = FeatureUnion(
-        transformer_list=[(col, build_ebe_pipeline(col)) for col in do_ebe_cols]
-    )
-
-    preprocessor = ColumnTransformer(
+    fill_pipe = ColumnTransformer(
         transformers=[
-            ("num", num_pipe, num_cols),
-            ("cat", cat_pipe, dont_ebe_cols),
-            ("ebe", ebe_pipe, do_ebe_cols),
-        ]
+            ("num", numeric_nan_fill_transformer, num_cols),
+            ("cat", categorical_nan_fill_transformer, cat_cols),
+        ],
+        verbose_feature_names_out=False,
     )
+    fill_pipe.set_output(transform="pandas")
 
+    # 2: Ordinal encoder
+    encoder_pipe = ColumnTransformer(
+        transformers=[
+            ("num", "passthrough", make_column_selector(dtype_include=np.number)),
+            (
+                "cat",
+                OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=777, dtype = np.int64),
+                make_column_selector(dtype_exclude=np.number),
+            ),
+        ],
+        verbose_feature_names_out=False,
+    )
+    encoder_pipe.set_output(transform="pandas")
+
+    # 3 Scalling
+    scaling_pipe = ColumnTransformer(
+        [
+            ("scaler", StandardScaler(), num_cols),
+        ],
+        remainder="passthrough",
+        verbose_feature_names_out=False,
+    )
+    scaling_pipe.set_output(transform="pandas")
+
+    # 4 Onehot encoder
+    onehot_pipe = ColumnTransformer(
+        transformers=[
+            (
+                "onehot_encoder",
+                OneHotEncoder(
+                    drop="if_binary", sparse_output=False, handle_unknown="ignore"
+                )
+                if onehotdrop
+                else OneHotEncoder(sparse_output=False, handle_unknown="ignore"),
+                cat_cols
+            ),
+        ],
+        remainder="passthrough",
+        verbose_feature_names_out=False,
+    )
+    onehot_pipe.set_output(transform="pandas")
+
+    # Combine all the transformers in a single pipeline
     pipeline = Pipeline(
         steps=[
-            ("preprocessor", preprocessor),
-            ("imputer", SimpleImputer(strategy="most_frequent")),
+            ("fill", fill_pipe),
+            ("le", encoder_pipe),
+            ("ss", scaling_pipe if normalize else None),
+            ("hot", onehot_pipe if onehot else None),
             ("classifier", classifier),
-        ]
+        ],
     )
 
     return pipeline
 
 
 def objective(
-    trial, model_class, param_space, X_train, y_train, X_val, y_val, seed_number=0
+    trial, model_class, pipeline_params, param_space, X_train, y_train, X_val, y_val, seed_number=0
 ):
     """
     Objective function for optimizing machine learning models using Optuna.
@@ -190,7 +233,7 @@ def objective(
     params["random_state"] = seed_number
 
     # Initialize and train the model
-    model = create_pipeline(X_train, y_train, model_class(**params))
+    model = create_pipeline(X_train, y_train, model_class(**params), **pipeline_params)
     model.fit(X_train, y_train)
 
     # Predict and evaluate the model
@@ -202,6 +245,7 @@ def objective(
 
 def optimize_model(
     model_class,
+    pipeline_params,
     param_space,
     X_train,
     y_train,
@@ -256,6 +300,7 @@ def optimize_model(
         lambda trial: objective(
             trial,
             model_class,
+            pipeline_params,
             param_space,
             X_train,
             y_train,
@@ -268,10 +313,10 @@ def optimize_model(
     )
 
     best_params = study.best_params
-    model = create_pipeline(X_train, y_train, model_class(
-        random_state = seed_number,
-        **best_params
-    ))
+    # get params 
+    model = create_pipeline(
+        X_train, y_train, model_class(random_state=seed_number, **best_params), **pipeline_params
+    )
     model.fit(X_train, y_train)
     return study, model
 
