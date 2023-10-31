@@ -1,20 +1,20 @@
 import os
 import pandas as pd
-import data_exploration as dex
+import credit_pipeline.data_exploration as dex
 
 
 def prepare_datasets():
+    """
+    Function that preprocess the datasets and save them in the data/prepared folder.
+    """
     # make dir if not exist
-    os.makedirs("../data/prepared", exist_ok=True)
+    os.makedirs("data/prepared", exist_ok=True)
 
     # home credit
     # TODO
-    # df = dex.read_csv_encoded("../data/HomeCredit/", "application_train.csv")
-    # columns_to_drop = dex.check_missing(df, 50, False)
-    # df = dex.drop_columns(df, columns_to_drop)
 
     # taiwan
-    df = dex.read_csv_encoded("../data/Taiwan/", "Taiwan.csv")
+    df = dex.read_csv_encoded("data/Taiwan/", "Taiwan.csv")
     df.columns = df.iloc[0, :].tolist()
     df = df.iloc[1:, :]
     df = df.drop(columns=["ID"])
@@ -54,10 +54,10 @@ def prepare_datasets():
     ]
     for col in cat_cols:
         df[col] = pd.Categorical(df[col])
-    df.to_csv("../data/prepared/taiwan.csv", index=False)
+    df.to_csv("data/prepared/taiwan.csv", index=False)
 
     # german
-    df = dex.read_csv_encoded("../data/German/", "german.csv")
+    df = dex.read_csv_encoded("data/German/", "german.csv")
     df.columns = [
         "CheckingAccount",
         "Duration",
@@ -79,10 +79,12 @@ def prepare_datasets():
         "Dependents",
         "Telephone",
         "ForeignWorker",
+        "DEFAULT"
     ]
+    df["DEFAULT"] = df.DEFAULT.apply(lambda x : 1 if x == 2 else 0)
     df["Gender"] = df.PersonalStatus
     df.CheckingAccount = df.CheckingAccount.apply(
-        {"A11": "< 0", "A12": "0 - 200", "A13": "> 200", "A14": "None"}.get
+        {"A11": "< 0", "A12": "0 - 200", "A13": "> 200", "A14": "No"}.get
     )
     df.CreditHistory = df.CreditHistory.apply(
         {
@@ -136,7 +138,7 @@ def prepare_datasets():
         }.get
     )
     df.OtherDebtors = df.OtherDebtors.apply(
-        {"A101": "None", "A102": "Co-applicant", "A103": "Guarantor"}.get
+        {"A101": "No", "A102": "Co-applicant", "A103": "Guarantor"}.get
     )
     df.Property = df.Property.apply(
         {
@@ -147,7 +149,7 @@ def prepare_datasets():
         }.get
     )
     df.OtherInstallmentPlans = df.OtherInstallmentPlans.apply(
-        {"A141": "Bank", "A142": "Stores", "A143": "None"}.get
+        {"A141": "Bank", "A142": "Stores", "A143": "No"}.get
     )
     df.Housing = df.Housing.apply(
         {"A151": "Rent", "A152": "Own", "A153": "For free"}.get
@@ -180,10 +182,16 @@ def prepare_datasets():
     ]
     for col in cat_cols:
         df[col] = pd.Categorical(df[col])
-    df.to_csv("../data/prepared/german.csv", index=False)
+    df.to_csv("data/prepared/german.csv", index=False)
 
 
 def load_dataset(dataset_name):
+    """Function to load the prepared datasets, includes
+    Home Credit, Taiwan and German.
+
+    :param dataset_name: string, name of the dataset
+    :return: pandas dataframe
+    """
     if dataset_name == "home_credit":
         raise NotImplementedError
     elif dataset_name == "taiwan":
