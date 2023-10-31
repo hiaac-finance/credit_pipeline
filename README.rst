@@ -18,6 +18,14 @@ Install
 
 ``pip install .``
 
+- Download the data from the following link and place it in the folder ``data/``:
+
+https://drive.google.com/file/d/1Y7bTNsxDv-te40FnJsoca1YeB4da6TCq/view?usp=sharing
+
+To preprocess the data use the following command at the root folder of the repository:
+
+``python -m credit_pipeline.data``
+
 Usage
 -----
 
