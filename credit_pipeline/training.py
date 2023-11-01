@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
@@ -10,7 +11,6 @@ from sklearn.preprocessing import (
     OneHotEncoder,
     OrdinalEncoder,
 )
-from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics import (
     roc_auc_score,
     balanced_accuracy_score,
@@ -26,6 +26,48 @@ from optuna.samplers import TPESampler
 import optuna
 
 import credit_pipeline.data_exploration as dex
+
+hyperparam_spaces = {
+    "LogisticRegression": {
+        'C': {'low': 0.001, 'high': 10, 'log': True, 'type':'float'},
+        'max_iter': {'low': 1000, 'high': 1000, 'step':1, 'type':'int'},
+        'penalty': {'choices': ["l1", 'l2'], 'type':'categorical'},
+        "class_weight" : {"choices" : [None, "balanced"], 'type':'categorical'},
+        "solver" : {"choices" : ["liblinear"], "type" : "categorical"}
+    },
+    "RandomForestClassifier": {
+        'n_estimators': {'low':10, 'high':150, 'step':20, 'type':'int'},
+        'max_depth': {'low':2, 'high':10, 'type':'int'},
+        'criterion': {'choices':['gini', 'entropy'], 'type':'categorical'},
+        'min_samples_leaf' : {"low" : 1, "high" : 51, "step" : 5, 'type':'int'},
+        "max_features" : {"low" : 0.1, "high" : 1.0, "type" : "float"},
+        "class_weight" : {"choices" : [None, "balanced"], 'type':'categorical'},
+    },
+    "LGBMClassifier": {
+        'learning_rate': {'low': 0.01, 'high': 1.0, 'type': 'float', 'log': True},
+        "num_leaves" : {"low" : 5, "high" : 100, "step" : 5, 'type':'int'},
+        'max_depth': {'low': 2, 'high': 10, 'type': 'int'},
+        'min_child_samples': {'low': 1, 'high': 51, 'step': 5, 'type': 'int'},
+        'colsample_bytree': {'low': 0.1, 'high': 1.0, 'type': 'float'},
+        'reg_alpha': {'low': 0.0, 'high': 1.0, 'type': 'float'},
+        'reg_lambda': {'low': 0.0, 'high': 1.0, 'type': 'float'},
+        'n_estimators': {'low': 5, 'high': 100, 'step': 5, 'type': 'int'},
+        "class_weight" : {"choices" : [None, "balanced"], 'type':'categorical'},
+        "verbose" : {"choices" : [-1], 'type':'categorical'},
+    },
+    "MLPClassifier": {
+        "hidden_layer_sizes" : {"choices" : [
+            [128, 64, 32],
+            [128, 64, 32, 16],
+            [256, 128, 64, 32, 16],
+        ], 'type':'categorical'},
+        "alpha" : {'low': 0.0001, 'high': 0.01, 'type': 'float', 'log': True},
+        "learning_rate" : {'choices': ['constant', 'invscaling', 'adaptive'], 'type':'categorical'},
+        "learning_rate_init" : {'low': 0.001, 'high': 0.1, 'type': 'float', 'log': True},
+        "early_stopping" : {'choices': [True], 'type':'categorical'},
+        "max_iter" : {"choices" : [50], 'type':'categorical'},
+    }
+}
 
 
 def false_positive_rate(y_true, y_pred):
@@ -176,7 +218,7 @@ def create_pipeline(
 
 
 def objective(
-    trial, model_class, pipeline_params, param_space, X_train, y_train, X_val, y_val, seed_number=0
+    trial, model_class, pipeline_params, param_space, X_train, y_train, X_val, y_val, cv, seed_number=0
 ):
     """
     Objective function for optimizing machine learning models using Optuna.
@@ -232,13 +274,25 @@ def objective(
 
     params["random_state"] = seed_number
 
-    # Initialize and train the model
-    model = create_pipeline(X_train, y_train, model_class(**params), **pipeline_params)
-    model.fit(X_train, y_train)
+    if cv is None:
+        # Initialize and train the model
+        model = create_pipeline(X_train, y_train, model_class(**params), **pipeline_params)
+        model.fit(X_train, y_train)
 
-    # Predict and evaluate the model
-    predictions = model.predict_proba(X_val)[:, 1]
-    score = roc_auc_score(y_val, predictions)
+        # Predict and evaluate the model
+        predictions = model.predict_proba(X_val)[:, 1]
+        score = roc_auc_score(y_val, predictions)
+    else:
+        score = []
+        kf = StratifiedKFold(n_splits = cv, shuffle=True, random_state=seed_number)
+        for train_idx, test_idx in kf.split(X_train, y_train):
+            X_train_fold, X_test_fold = X_train.iloc[train_idx], X_train.iloc[test_idx]
+            y_train_fold, y_test_fold = y_train.iloc[train_idx], y_train.iloc[test_idx]
+            model = create_pipeline(X_train_fold, y_train_fold, model_class(**params), **pipeline_params)
+            model.fit(X_train_fold, y_train_fold)
+            predictions = model.predict_proba(X_test_fold)[:, 1]
+            score.append(roc_auc_score(y_test_fold, predictions))
+        score = np.mean(score)
 
     return score
 
@@ -251,6 +305,7 @@ def optimize_model(
     y_train,
     X_val,
     y_val,
+    cv = None,
     n_trials=100,
     seed_number=0,
 ):
@@ -306,6 +361,7 @@ def optimize_model(
             y_train,
             X_val,
             y_val,
+            cv,
             seed_number=seed_number,
         ),
         n_trials=n_trials,
