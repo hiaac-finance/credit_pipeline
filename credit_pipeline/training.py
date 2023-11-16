@@ -449,8 +449,10 @@ def get_metrics(name_model_dict, X, y, threshold=0.5):
         return pd.DataFrame.from_dict(
             df_dict, orient="index", columns=models_dict.keys()
         ).T
-
-    return get_metrics_df(models_dict, y)
+    
+    metrics = get_metrics_df(models_dict, y)
+    metrics = metrics.reset_index().rename(columns={"index": "model"})
+    return metrics
 
 
 def get_fairness_metrics(models_dict, y, z, benefit_class=1):
@@ -522,4 +524,6 @@ def get_fairness_metrics(models_dict, y, z, benefit_class=1):
             df_dict, orient="index", columns=models_dict_benefit.keys()
         ).T
 
-    return get_metrics_df(models_dict_benefit)
+    metrics = get_metrics_df(models_dict_benefit)
+    metrics = metrics.reset_index().rename(columns={"index": "model"})
+    return metrics
