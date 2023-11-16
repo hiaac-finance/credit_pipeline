@@ -298,13 +298,13 @@ def objective(
 
 
 def optimize_model(
-    model_class,
-    pipeline_params,
-    param_space,
     X_train,
     y_train,
     X_val,
     y_val,
+    model_class,
+    pipeline_params = {},
+    param_space = None,
     cv = None,
     n_trials=100,
     seed_number=0,
@@ -348,6 +348,13 @@ def optimize_model(
     Note:
         Ensure that the required libraries (`optuna`, desired machine learning model, and metrics) are installed before using this function.
     """
+
+    if param_space is None:
+        if model_class.__name__ in hyperparam_spaces.keys():
+            param_space = hyperparam_spaces[model_class.__name__]
+        else:
+            raise ValueError("No hyperparameter space provided")
+    
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     sampler = TPESampler(seed=seed_number)
     study = optuna.create_study(direction="maximize", sampler=sampler)
@@ -365,7 +372,7 @@ def optimize_model(
             seed_number=seed_number,
         ),
         n_trials=n_trials,
-        show_progress_bar=True,
+        show_progress_bar=False,
     )
 
     best_params = study.best_params
