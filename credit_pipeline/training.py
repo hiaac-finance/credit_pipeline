@@ -389,30 +389,6 @@ def optimize_model(
     return study, model
 
 
-def optimize_models(models, param_spaces, X_train, y_train, X_val, y_val, n_trials=50):
-    optimized_models = {}
-    for model_name, model_class in models.items():
-        print(f"Optimizing {model_name}...")
-        study = optimize_model(
-            model_class,
-            param_spaces[model_name],
-            X_train,
-            y_train,
-            X_val,
-            y_val,
-            n_trials,
-        )
-        best_params = study.best_params
-        print(f"Best parameters for {model_name}: {best_params}")  # Diagnostic print
-        optimized_model = model_class(**best_params)
-        print(
-            f"Optimized model instance for {model_name}: {optimized_model}"
-        )  # Diagnostic print
-        optimized_model.fit(X_train, y_train)
-        optimized_models[model_name] = optimized_model
-    return optimized_models
-
-
 def ks_threshold(y_true, y_score):
     fpr, tpr, thresholds = roc_curve(y_true, y_score)
     opt_threshold = thresholds[np.argmax(tpr - fpr)]
