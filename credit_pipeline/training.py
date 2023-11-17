@@ -15,7 +15,6 @@ from sklearn.metrics import roc_auc_score, roc_curve
 from optuna.samplers import TPESampler
 import optuna
 
-import credit_pipeline.data_exploration as dex
 
 hyperparam_spaces = {
     "LogisticRegression": {
@@ -305,57 +304,47 @@ def optimize_model(
     X_val,
     y_val,
     model_class,
-    pipeline_params={},
     param_space=None,
-    cv=None,
+    pipeline_params={},
     n_trials=100,
+    timeout=None,
     seed_number=0,
-):
-    """
-    Optimize hyperparameters of a machine learning model using Optuna.
+):  
+    """Optimize hyperparameters of a machine learning model using Optuna.
+    This function creates an Optuna study to search for the best hyperparameters for a given machine learning model from a specified parameter space. The objective of the study is to maximize the ROC score of the model on the validation score.
+    Parameter spaces for LogisticRegression, RandomForestClassifier, LGBMClassifier, and MLPClassifier are provided by default. For any model, a custom parameter space can be provided.
 
-    This function creates an Optuna study to search for the best hyperparameters for a given machine learning
-    model from a specified parameter space. The objective of the study is to maximize the performance of the
-    model on the training data using the provided scoring metric.
-
-    :param model_class: The class of the machine learning model to be trained.
-    :type model_class: class
-    :param param_space: Dictionary defining the hyperparameter search space. For categorical hyperparameters,
-                        provide a list of possible values. For continuous hyperparameters, provide a tuple of
-                        (min, max). For integer hyperparameters, provide a tuple of (min, max, step).
-    :type param_space: dict
     :param X_train: Training data features.
     :type X_train: pandas.DataFrame or numpy.ndarray
-    :param y_train: Training data target.
-    :type y_train: pandas.Series or numpy.ndarray
-    :param scoring_metric: The metric function to evaluate the performance of the model.
-    :type scoring_metric: callable
-    :param n_trials: Number of trials for optimization. Default is 100.
-    :type n_trials: int
-    :return:
-        - An Optuna study object containing the results of the optimization.
-    :rtype: optuna.study.Study
-
-    :Example:
-
-    >>> from sklearn.ensemble import RandomForestRegressor
-    >>> from sklearn.metrics import mean_squared_error
-    >>> param_space = {
-    ...     'n_estimators': (10, 100, 10),
-    ...     'max_depth': (3, 10),
-    ...     'min_samples_split': [2, 3, 4]
-    ... }
-    >>> study = optimize_model(RandomForestRegressor, param_space, X_train, y_train, mean_squared_error)
-
-    Note:
-        Ensure that the required libraries (`optuna`, desired machine learning model, and metrics) are installed before using this function.
+    :param y_train: Training data target.   
+    :type y_train: array-like
+    :param X_val: Validation data features.
+    :type X_val: pandas.DataFrame or numpy.ndarray
+    :param y_val: Validation data target.
+    :type y_val: array-like
+    :param model_class: The class of the machine learning model to be trained
+    :type model_class: class with sklearn API
+    :param param_space: description of parameter spaces, defaults to None
+    :type param_space: dict with param spaces, optional
+    :param pipeline_params: parameters to call pipeline, defaults to {}
+    :type pipeline_params: dict, optional
+    :param n_trials: number of trials, defaults to 100
+    :type n_trials: int, optional
+    :param timeout: number of seconds, defaults to None
+    :type timeout: int, optional
+    :param seed_number: random seed, defaults to 0
+    :type seed_number: int, optional
+    :return: study and model
+    :rtype: optuna.study.Study, sklearn.pipeline.Pipeline
     """
-
     if param_space is None:
         if model_class.__name__ in hyperparam_spaces.keys():
             param_space = hyperparam_spaces[model_class.__name__]
         else:
             raise ValueError("No hyperparameter space provided")
+        
+    if n_trials is not None and timeout is not None:
+        raise ValueError("Only one of n_trials or timeout should be provided")
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     sampler = TPESampler(seed=seed_number)
@@ -370,15 +359,15 @@ def optimize_model(
             y_train,
             X_val,
             y_val,
-            cv,
             seed_number=seed_number,
         ),
         n_trials=n_trials,
+        timeout = timeout,
         show_progress_bar=False,
     )
 
+    # Train model with best hyperparameters
     best_params = study.best_params
-    # get params
     model = create_pipeline(
         X_train,
         y_train,
@@ -390,6 +379,7 @@ def optimize_model(
 
 
 def ks_threshold(y_true, y_score):
+    """Identify the threshold that maximizes the Kolmogorov-Smirnov statistic."""
     fpr, tpr, thresholds = roc_curve(y_true, y_score)
     opt_threshold = thresholds[np.argmax(tpr - fpr)]
     return opt_threshold
