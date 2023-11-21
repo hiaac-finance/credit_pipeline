@@ -300,13 +300,13 @@ def objective(
 
 
 def optimize_model(
+    model_class,
+    param_space,
     X_train,
     y_train,
-    model_class,
     X_val=None,
     y_val=None,
     cv=5,
-    param_space=None,
     pipeline_params={},
     n_trials=None,
     timeout=None,
@@ -316,20 +316,20 @@ def optimize_model(
     This function creates an Optuna study to search for the best hyperparameters for a given machine learning model from a specified parameter space. The objective of the study is to maximize the ROC score of the model on the validation score. It can work with a provided validation set or with cross-validation.
     Parameter spaces for LogisticRegression, RandomForestClassifier, LGBMClassifier, and MLPClassifier are provided by default. For any model, a custom parameter space can be provided.
 
+    :param model_class: The class of the machine learning model to be trained
+    :type model_class: class with sklearn API
+    :param param_space: description of parameter spaces, pass string "suggest" to use default spaces
+    :type param_space: dict with param spaces or string "suggest"
     :param X_train: Training data features.
     :type X_train: pandas.DataFrame or numpy.ndarray
     :param y_train: Training data target.
     :type y_train: array-like
-    :param model_class: The class of the machine learning model to be trained
-    :type model_class: class with sklearn API
     :param X_val: Validation data features.
     :type X_val: pandas.DataFrame or numpy.ndarray
     :param y_val: Validation data target.
     :type y_val: array-like
     :param cv: number of folds for cross-validation, defaults to 5
     :type cv: int, optional
-    :param param_space: description of parameter spaces, defaults to None
-    :type param_space: dict with param spaces, optional
     :param pipeline_params: parameters to call pipeline, defaults to {}
     :type pipeline_params: dict, optional
     :param n_trials: number of trials, defaults to 100
@@ -341,14 +341,11 @@ def optimize_model(
     :return: study and model
     :rtype: optuna.study.Study, sklearn.pipeline.Pipeline
     """
-    if param_space is None:
+    if param_space=="suggest":
         if model_class.__name__ in hyperparam_spaces.keys():
             param_space = hyperparam_spaces[model_class.__name__]
         else:
             raise ValueError("No hyperparameter space provided")
-
-    if n_trials is None and timeout is None:
-        raise ValueError("Either n_trials or timeout must be provided")
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     sampler = TPESampler(seed=seed_number)
