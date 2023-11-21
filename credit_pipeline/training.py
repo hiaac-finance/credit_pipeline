@@ -218,28 +218,32 @@ def objective(
     seed_number=0,
 ):
     """
-    Objective function for optimizing machine learning models using Optuna.
-
-    This function serves as the objective for an Optuna study, aiming to find the best hyperparameters
+    Objective function for optimizing machine learning models using Optuna. This function serves as the objective for an Optuna study, aiming to find the best hyperparameters
     for a machine learning model from a given parameter space. It initializes the model with hyperparameters
     suggested by Optuna, trains it, and then evaluates it using a specified scoring metric.
+
 
     :param trial: The trial instance from Optuna.
     :type trial: optuna.trial.Trial
     :param model_class: The class of the machine learning model to be trained.
-    :type model_class: class
-    :param param_space: Dictionary defining the hyperparameter search space. For categorical hyperparameters,
-                        provide a list of possible values. For continuous hyperparameters, provide a tuple of
-                        (min, max). For integer hyperparameters, provide a tuple of (min, max, step).
+    :type model_class: class with sklearn API
+    :param pipeline_params: parameters of pipeline
+    :type pipeline_params: dict
+    :param param_space: description of parameter spaces
     :type param_space: dict
     :param X_train: Training data features.
     :type X_train: pandas.DataFrame or numpy.ndarray
     :param y_train: Training data target.
     :type y_train: pandas.Series or numpy.ndarray
-    :param scoring_metric: The metric function to evaluate the performance of the model.
-    :type scoring_metric: callable
-    :return:
-        - Score of the model on the training data using the provided scoring metric.
+    :param X_val: Validation data features.
+    :type X_val: pandas.DataFrame or numpy.ndarray
+    :param y_val: Validation data target.
+    :type y_val: pandas.Series or numpy.ndarray
+    :param cv: number of folds for cross-validation if validation is not provided, defaults to 5
+    :type cv: int
+    :param seed_number: random seed, defaults to 0
+    :type seed_number: int, optional
+    :return: score of the model with validation or mean score with cross-validation
     :rtype: float
 
     :Example:
@@ -252,9 +256,6 @@ def objective(
     ...     'min_samples_split': [2, 3, 4]
     ... }
     >>> objective(trial, RandomForestRegressor, param_space, X_train, y_train, mean_squared_error)
-
-    Note:
-        Ensure that the required libraries (`optuna`, desired machine learning model, and metrics) are installed before using this function.
     """
     # Extract hyperparameters from the parameter space
     params = {}
@@ -271,7 +272,7 @@ def objective(
 
     params["random_state"] = seed_number
 
-    if cv is None:
+    if X_val is not None and y_val is not None:
         # Initialize and train the model
         model = create_pipeline(
             X_train, y_train, model_class(**params), **pipeline_params
@@ -284,15 +285,15 @@ def objective(
     else:
         score = []
         kf = StratifiedKFold(n_splits=cv, shuffle=True, random_state=seed_number)
-        for train_idx, test_idx in kf.split(X_train, y_train):
-            X_train_fold, X_test_fold = X_train.iloc[train_idx], X_train.iloc[test_idx]
-            y_train_fold, y_test_fold = y_train.iloc[train_idx], y_train.iloc[test_idx]
+        for train_idx, val_idx in kf.split(X_train, y_train):
+            X_train_fold, X_val_fold = X_train.iloc[train_idx], X_train.iloc[val_idx]
+            y_train_fold, y_val_fold = y_train.iloc[train_idx], y_train.iloc[val_idx]
             model = create_pipeline(
                 X_train_fold, y_train_fold, model_class(**params), **pipeline_params
             )
             model.fit(X_train_fold, y_train_fold)
-            predictions = model.predict_proba(X_test_fold)[:, 1]
-            score.append(roc_auc_score(y_test_fold, predictions))
+            predictions = model.predict_proba(X_val_fold)[:, 1]
+            score.append(roc_auc_score(y_val_fold, predictions))
         score = np.mean(score)
 
     return score
@@ -301,29 +302,32 @@ def objective(
 def optimize_model(
     X_train,
     y_train,
-    X_val,
-    y_val,
     model_class,
+    X_val=None,
+    y_val=None,
+    cv=5,
     param_space=None,
     pipeline_params={},
-    n_trials=100,
+    n_trials=None,
     timeout=None,
     seed_number=0,
-):  
+):
     """Optimize hyperparameters of a machine learning model using Optuna.
-    This function creates an Optuna study to search for the best hyperparameters for a given machine learning model from a specified parameter space. The objective of the study is to maximize the ROC score of the model on the validation score.
+    This function creates an Optuna study to search for the best hyperparameters for a given machine learning model from a specified parameter space. The objective of the study is to maximize the ROC score of the model on the validation score. It can work with a provided validation set or with cross-validation.
     Parameter spaces for LogisticRegression, RandomForestClassifier, LGBMClassifier, and MLPClassifier are provided by default. For any model, a custom parameter space can be provided.
 
     :param X_train: Training data features.
     :type X_train: pandas.DataFrame or numpy.ndarray
-    :param y_train: Training data target.   
+    :param y_train: Training data target.
     :type y_train: array-like
+    :param model_class: The class of the machine learning model to be trained
+    :type model_class: class with sklearn API
     :param X_val: Validation data features.
     :type X_val: pandas.DataFrame or numpy.ndarray
     :param y_val: Validation data target.
     :type y_val: array-like
-    :param model_class: The class of the machine learning model to be trained
-    :type model_class: class with sklearn API
+    :param cv: number of folds for cross-validation, defaults to 5
+    :type cv: int, optional
     :param param_space: description of parameter spaces, defaults to None
     :type param_space: dict with param spaces, optional
     :param pipeline_params: parameters to call pipeline, defaults to {}
@@ -342,9 +346,9 @@ def optimize_model(
             param_space = hyperparam_spaces[model_class.__name__]
         else:
             raise ValueError("No hyperparameter space provided")
-        
-    if n_trials is not None and timeout is not None:
-        raise ValueError("Only one of n_trials or timeout should be provided")
+
+    if n_trials is None and timeout is None:
+        raise ValueError("Either n_trials or timeout must be provided")
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     sampler = TPESampler(seed=seed_number)
@@ -359,10 +363,11 @@ def optimize_model(
             y_train,
             X_val,
             y_val,
+            cv,
             seed_number=seed_number,
         ),
         n_trials=n_trials,
-        timeout = timeout,
+        timeout=timeout,
         show_progress_bar=False,
     )
 
