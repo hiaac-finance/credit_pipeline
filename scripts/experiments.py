@@ -7,7 +7,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 from lightgbm import LGBMClassifier
 from aif360.datasets import BinaryLabelDataset
-from aif360.algorithms import Reweighing
+from aif360.algorithms.preprocessing import Reweighing
 from fairgbm import FairGBMClassifier
 from sklego.linear_model import DemographicParityClassifier, EqualOpportunityClassifier
 from fairlearn.postprocessing import ThresholdOptimizer
@@ -18,6 +18,13 @@ from credit_pipeline import data, training, evaluate
 import warnings
 
 warnings.filterwarnings("ignore")
+
+MODEL_CLASS_LIST = [
+    LogisticRegression,
+    MLPClassifier,
+    RandomForestClassifier,
+    LGBMClassifier,
+]
 
 
 def load_split(dataset_name, fold, validation=False, seed=0):
@@ -61,18 +68,14 @@ def experiment_credit_models(args):
     :param args: arguments for the experiment
     :type args: dict
     """
+
     for fold in range(10):
         Path(f"../results/{args['dataset']}/{fold}").mkdir(parents=True, exist_ok=True)
         print("Fold: ", fold)
         X_train, Y_train, X_val, Y_val, X_test, Y_test = load_split(
             args["dataset"], fold, args["validation"], args["seed"]
         )
-        for model_class in [
-            LogisticRegression,
-            MLPClassifier,
-            RandomForestClassifier,
-            LGBMClassifier,
-        ]:
+        for model_class in MODEL_CLASS_LIST:
             print("Model: ", model_class.__name__)
             study, model = training.optimize_model(
                 model_class,
@@ -81,10 +84,16 @@ def experiment_credit_models(args):
                 Y_train,
                 X_val,
                 Y_val,
-                cv = None if args["validation"] else 5,
+                cv=None if args["validation"] else 5,
                 n_trials=args["n_trials"],
                 timeout=args["timeout"],
             )
+            Y_pred = model.predict_proba(X_val)[:, 1]
+            threshold = training.ks_threshold(Y_val, Y_pred)
+            model_dict = {model_class.__name__: [model, threshold]}
+            metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
+
+            # save results
             print(f"Finished training with ROC {study.best_value:.2f}")
             joblib.dump(
                 model, f"../results/{args['dataset']}/{fold}/{model_class.__name__}.pkl"
@@ -93,29 +102,16 @@ def experiment_credit_models(args):
                 study,
                 f"../results/{args['dataset']}/{fold}/{model_class.__name__}_study.pkl",
             )
-            Y_pred = model.predict_proba(X_val)[:, 1]
-            threshold = training.ks_threshold(Y_val, Y_pred)
-            model_dict = {model_class.__name__: [model, threshold]}
-            metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
             metrics.to_csv(
                 f"../results/{args['dataset']}/{fold}/{model_class.__name__}_metrics.csv",
                 index=False,
             )
 
-    # summaryze the metrics
-    metrics = []
-    for fold in range(10):
-        for model_class in [
-            LogisticRegression,
-            MLPClassifier,
-            RandomForestClassifier,
-            LGBMClassifier,
-        ]:
-            metrics.append(
-                pd.read_csv(
-                    f"../results/{args['dataset']}/{fold}/{model_class.__name__}_metrics.csv"
-                )
-            )
+    metrics = [
+        pd.read_csv(f"../results/{args['dataset']}/{fold}/{model_class.__name__}_metrics.csv")
+        for fold in range(10)
+        for model_class in MODEL_CLASS_LIST
+    ]
     metrics = pd.concat(metrics)
     metrics.groupby("model").mean().to_csv(
         f"../results/{args['dataset']}/metrics_mean.csv"
@@ -154,12 +150,7 @@ def experiment_fairness(args):
         rw = Reweighing(unprivileged_groups=..., privileged_groups=...)  # TODO
         rw.fit(X_train_aif)
         rw_weights = rw.transform(X_train_aif).instance_weights
-        for model_class in [
-            LogisticRegression,
-            MLPClassifier,
-            RandomForestClassifier,
-            LGBMClassifier,
-        ]:
+        for model_class in MODEL_CLASS_LIST:
             study, model = training.optimize_model(
                 X_train,
                 Y_train,
@@ -235,7 +226,6 @@ if __name__ == "__main__":
     args = vars(parser.parse_args())
     if args["n_trials"] is not None:
         args["timeout"] = None
-    
 
     if args["experiment"] == "credit_models":
         experiment_credit_models(args)
