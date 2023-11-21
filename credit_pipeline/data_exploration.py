@@ -10,6 +10,7 @@ from scipy import stats
 import dash_bio
 import chardet
 import os
+import inspect
 
 
 def read_csv_encoded(path, filename):
@@ -297,6 +298,26 @@ def types_columns(dataframe):
     # Convert the set of unique data types to a list
     return list(listTypes)
 
+#@title function for get shapes
+def get_shapes(arrays):
+    shape_dict = {}
+    
+    variables_before = inspect.currentframe().f_back.f_locals
+    def variable_to_str(var):
+        for name, value in variables_before.items():
+            if value is var:
+                return name
+    if isinstance(arrays, (list, tuple)):
+        for arr in arrays:
+            name = variable_to_str(arr)
+            print(name,':', arr.shape)
+            shape_dict[name] = arr.shape
+    elif hasattr(arrays, 'shape'):
+        name = variable_to_str(arrays)
+        print(name,':', arrays.shape)
+        shape_dict[name] = arrays.shape
+
+    return shape_dict
 
 def list_by_unbalanced(dataframe, crit=0.7):
     """
