@@ -6,6 +6,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 from sklearn.compose import ColumnTransformer, make_column_selector
 from sklearn.pipeline import Pipeline
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import (
     StandardScaler,
     OneHotEncoder,
@@ -65,15 +66,61 @@ hyperparam_spaces = {
 }
 
 
-def need_EBE(dataframe, cat_cols, crit=3):
-    need_ebe = []
-    dont_ebe = []
-    for c in cat_cols:
-        if len(dataframe[c].unique()) > crit:
-            need_ebe.append(c)
+class EBE(
+    BaseEstimator,
+    TransformerMixin,
+):
+    def __init__(self, k=1):
+        self.k = k
+
+    def fit(self, X, y):
+        self.feature_names_in_ = []
+        self.n_features, self.n_items = X.shape[1], X.shape[0]
+        self._aux_dict_main = {}
+        self.mean = {}
+        self.unique_values = {col: X[col].unique() for col in X.columns}
+        for i in range(self.n_features):
+            Xi = X.iloc[:, i]
+            X_name = X.iloc[:, i].name
+
+            y = pd.Series(y, index=X.index)
+            aux_dict = pd.Series(y).groupby(Xi).agg(["mean", "count"]).to_dict()
+            self._aux_dict_main[X_name] = aux_dict
+            self.feature_names_in_.append(X_name)
+            self.mean[X_name] = y.mean()
+        return self
+
+    def transform(self, X, y=None):
+        Xt_list = []
+        for i in range(self.n_features):
+            Xi = X.iloc[:, i]
+            X_name = X.iloc[:, i].name
+            X_copy = Xi.copy()
+            mean = self._aux_dict_main[X_name]["mean"]
+            count = self._aux_dict_main[X_name]["count"]
+
+            mode = pd.Series(mean.values()).mode()[0]
+            fit_unique = set(self.unique_values[X_name])
+            X_unique = set(Xi.unique())
+            unknown_values = list(X_unique - fit_unique)
+            X_copy = X_copy.replace(unknown_values, mode)
+
+            group_ave = X_copy.replace(mean)
+            group_count = X_copy.replace(count)
+
+            Xt = (
+                (group_ave * group_count + self.k * self.mean[X_name])
+                / (self.k + group_count)
+            ).values.reshape(-1, 1)
+            Xt_list.append(Xt)
+        Xt_array = np.hstack(Xt_list)
+        return Xt_array
+
+    def get_feature_names_out(self, input_features=None):
+        if isinstance(input_features, pd.DataFrame):
+            return [col for col in input_features.columns]
         else:
-            dont_ebe.append(c)
-    return need_ebe, dont_ebe
+            return [col for col in input_features]
 
 
 def columns_by_type(dataframe, types_cols=["numeric"], debug=False):
@@ -112,10 +159,17 @@ def create_pipeline(
     crit=3,
 ):
     if cat_cols == "infer":
-        num_cols = columns_by_type(X, ["numeric"])
-        cat_cols = columns_by_type(X, ["categorical"])
+        num_cols = [
+            col for col in X.columns if X[col].dtype.kind in ["b", "i", "u", "f", "c"]
+        ]
+        cat_cols = [col for col in X.columns if X[col].dtype.kind in ["O", "S", "U"]]
+        ebe_cols = [col for col in cat_cols if X[col].nunique() >= crit if do_EBE]
+        cat_cols = [item for item in cat_cols if item not in ebe_cols]
     else:
         num_cols = X.columns.difference(cat_cols).tolist()
+        ebe_cols = [col for col in cat_cols if X[col].nunique() >= crit if do_EBE]
+        cat_cols = [item for item in cat_cols if item not in ebe_cols]
+
 
     # check if need EBE
     if do_EBE:
@@ -140,6 +194,7 @@ def create_pipeline(
         transformers=[
             ("num", numeric_nan_fill_transformer, num_cols),
             ("cat", categorical_nan_fill_transformer, cat_cols),
+            ("ebe", categorical_nan_fill_transformer, ebe_cols),
         ],
         verbose_feature_names_out=False,
     )
@@ -148,15 +203,26 @@ def create_pipeline(
     # 2: Ordinal encoder
     encoder_pipe = ColumnTransformer(
         transformers=[
-            ("num", "passthrough", make_column_selector(dtype_include=np.number)),
+            ("num", "passthrough", num_cols),
             (
                 "cat",
                 OrdinalEncoder(
                     handle_unknown="use_encoded_value",
-                    unknown_value=777,
-                    dtype=np.int64,
+                    unknown_value=-1,
+                    encoded_missing_value=-1,
                 ),
-                make_column_selector(dtype_exclude=np.number),
+                cat_cols,
+            ),
+            (
+                "ebe",
+                EBE()
+                if do_EBE
+                else OrdinalEncoder(
+                    handle_unknown="use_encoded_value",
+                    unknown_value=-1,
+                    encoded_missing_value=-1,
+                ),
+                ebe_cols,
             ),
         ],
         verbose_feature_names_out=False,
@@ -341,7 +407,7 @@ def optimize_model(
     :return: study and model
     :rtype: optuna.study.Study, sklearn.pipeline.Pipeline
     """
-    if param_space=="suggest":
+    if param_space == "suggest":
         if model_class.__name__ in hyperparam_spaces.keys():
             param_space = hyperparam_spaces[model_class.__name__]
         else:
