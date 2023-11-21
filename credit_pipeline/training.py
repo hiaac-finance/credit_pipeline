@@ -64,6 +64,11 @@ hyperparam_spaces = {
         "max_iter": {"choices": [50], "type": "categorical"},
     },
 }
+hyperparam_spaces["FairGBMClassifier"] = hyperparam_spaces["LGBMClassifier"].copy()
+hyperparam_spaces["FairGBMClassifier"]["multiplier_learning_rate"] = {
+    "low": 0.01, "high" : 1, "type": "float",
+}
+
 
 
 class EBE(
