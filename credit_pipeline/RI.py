@@ -63,3 +63,65 @@ params_dict = {
                           'n_neighbors': 7, 'tol': 0.001,},
 
     }
+
+#Cherry picked columns for AR policy
+cherry_cols = ["REGION_RATING_CLIENT", "REGION_RATING_CLIENT_W_CITY",
+        "WEEKDAY_APPR_PROCESS_START", "HOUR_APPR_PROCESS_START",
+        "FLAG_OWN_REALTY", "NAME_TYPE_SUITE", "NAME_INCOME_TYPE",
+        "NAME_HOUSING_TYPE", "OWN_CAR_AGE", "FLAG_MOBIL", "FLAG_EMP_PHONE",
+        "REG_REGION_NOT_WORK_REGION", "LIVE_REGION_NOT_WORK_REGION",
+        "REG_CITY_NOT_LIVE_CITY", "REG_CITY_NOT_WORK_CITY",
+        "LIVE_CITY_NOT_WORK_CITY", "ORGANIZATION_TYPE",
+        "APARTMENTS_AVG", "BASEMENTAREA_AVG", "YEARS_BEGINEXPLUATATION_AVG",
+        "YEARS_BUILD_AVG", "COMMONAREA_AVG", "ELEVATORS_AVG",
+        "ENTRANCES_AVG", "FLOORSMAX_AVG", "FLOORSMIN_AVG", "LANDAREA_AVG",
+        "LIVINGAPARTMENTS_AVG", "LIVINGAREA_AVG", "NONLIVINGAPARTMENTS_AVG",
+        "NONLIVINGAREA_AVG", "APARTMENTS_MODE", "BASEMENTAREA_MODE",
+        "YEARS_BEGINEXPLUATATION_MODE", "YEARS_BUILD_MODE", "COMMONAREA_MODE",
+        "ELEVATORS_MODE", "ENTRANCES_MODE", "FLOORSMAX_MODE", "FLOORSMIN_MODE",
+        "LANDAREA_MODE", "LIVINGAPARTMENTS_MODE", "LIVINGAREA_MODE",
+        "NONLIVINGAPARTMENTS_MODE", "NONLIVINGAREA_MODE", "APARTMENTS_MEDI",
+        "BASEMENTAREA_MEDI", "YEARS_BEGINEXPLUATATION_MEDI", "YEARS_BUILD_MEDI",
+        "COMMONAREA_MEDI", "ELEVATORS_MEDI", "ENTRANCES_MEDI", "FLOORSMAX_MEDI",
+        "FLOORSMIN_MEDI", "LANDAREA_MEDI", "LIVINGAPARTMENTS_MEDI",
+        "LIVINGAREA_MEDI", "NONLIVINGAPARTMENTS_MEDI", "NONLIVINGAREA_MEDI",
+        "FONDKAPREMONT_MODE", "HOUSETYPE_MODE", "TOTALAREA_MODE",
+        "WALLSMATERIAL_MODE", "EMERGENCYSTATE_MODE", "FLAG_DOCUMENT_3",
+        "AMT_REQ_CREDIT_BUREAU_HOUR", "AMT_REQ_CREDIT_BUREAU_DAY",
+        "AMT_REQ_CREDIT_BUREAU_WEEK", "AMT_REQ_CREDIT_BUREAU_MON",
+        "AMT_REQ_CREDIT_BUREAU_QRT", "AMT_REQ_CREDIT_BUREAU_YEAR"]
+
+#Columns to use on RI study
+cols_RI = ['AMT_CREDIT', 'EXT_SOURCE_1', 'EXT_SOURCE_2',
+        'EXT_SOURCE_3', 'REGION_POPULATION_RELATIVE', 'DAYS_EMPLOYED', 'DAYS_BIRTH', 'AMT_INCOME_TOTAL',
+        'CNT_CHILDREN', 'CNT_FAM_MEMBERS', 'REG_CITY_NOT_WORK_CITY', 'AMT_GOODS_PRICE',
+        'FLAG_OWN_CAR', 'NAME_EDUCATION_TYPE', 'NAME_CONTRACT_TYPE']
+
+def load_policy(path = 'drive'):
+    if path == 'drive':
+        policy_model_path = "drive/Shareddrives/H.IAAC - AI in Finance/Models/AR_policy.joblib"
+    else:
+        policy_model_path = path
+
+    loaded_policy = joblib.load(policy_model_path)
+    policy_model, policy_samples = loaded_policy.values()
+
+    return policy_model, policy_samples
+
+def remove_policy_samples(data, policy_samples):
+    return data[~data['SK_ID_CURR'].isin(policy_samples)]
+
+def accept_reject_split(data, threshold = 0.4, path = 'drive'):
+    if path == 'drive':
+        policy_model_path = "drive/Shareddrives/H.IAAC - AI in Finance/Models/AR_policy.joblib"
+    else:
+        policy_model_path = path
+
+    loaded_policy = joblib.load(policy_model_path)
+    policy_model, policy_samples = loaded_policy.values()
+
+    rej_prob = policy_model.predict_proba(data)[:,1]
+    accepts = data[rej_prob < threshold]
+    rejects = data[rej_prob >= threshold]
+
+    return accepts, rejects
