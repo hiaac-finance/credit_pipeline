@@ -160,7 +160,7 @@ def create_pipeline(
     onehot=True,
     onehotdrop=False,
     normalize=True,
-    do_EBE=False,
+    do_EBE=True,
     crit=3,
 ):
     if cat_cols == "infer":
