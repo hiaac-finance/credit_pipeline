@@ -280,6 +280,7 @@ def objective(
     trial,
     model_class,
     pipeline_params,
+    fit_params,
     param_space,
     X_train,
     y_train,
@@ -300,6 +301,8 @@ def objective(
     :type model_class: class with sklearn API
     :param pipeline_params: parameters of pipeline
     :type pipeline_params: dict
+    :param fit_params: parameters to call fit, defaults to {}
+    :type fit_params: dict, optional
     :param param_space: description of parameter spaces
     :type param_space: dict
     :param X_train: Training data features.
@@ -348,12 +351,14 @@ def objective(
         model = create_pipeline(
             X_train, y_train, model_class(**params), **pipeline_params
         )
-        model.fit(X_train, y_train)
+        model.fit(X_train, y_train, **fit_params)
 
         # Predict and evaluate the model
         predictions = model.predict_proba(X_val)[:, 1]
         score = roc_auc_score(y_val, predictions)
     else:
+        if fit_params != {}:
+            raise ValueError("fit_params can only be specified with validation set")
         score = []
         kf = StratifiedKFold(n_splits=cv, shuffle=True, random_state=seed_number)
         for train_idx, val_idx in kf.split(X_train, y_train):
@@ -379,6 +384,7 @@ def optimize_model(
     y_val=None,
     cv=5,
     pipeline_params={},
+    fit_params = {},
     n_trials=None,
     timeout=None,
     seed_number=0,
@@ -403,6 +409,8 @@ def optimize_model(
     :type cv: int, optional
     :param pipeline_params: parameters to call pipeline, defaults to {}
     :type pipeline_params: dict, optional
+    :param fit_params: parameters to call fit, defaults to {}
+    :type fit_params: dict, optional
     :param n_trials: number of trials, defaults to 100
     :type n_trials: int, optional
     :param timeout: number of seconds, defaults to None
@@ -426,6 +434,7 @@ def optimize_model(
             trial,
             model_class,
             pipeline_params,
+            fit_params,
             param_space,
             X_train,
             y_train,
