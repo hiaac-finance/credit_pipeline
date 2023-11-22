@@ -451,3 +451,12 @@ def ks_threshold(y_true, y_score):
     fpr, tpr, thresholds = roc_curve(y_true, y_score)
     opt_threshold = thresholds[np.argmax(tpr - fpr)]
     return opt_threshold
+
+def create_train_test(dataset, final = False, seed = 880, dev_test_size = 0.2):
+    #Do not change the following parameters neither the value of final
+    train, holdout = train_test_split(dataset, test_size=0.2, random_state=880)
+    if final:
+        return train, holdout
+    else:
+        dev_train, dev_test = train_test_split(train, test_size=dev_test_size, random_state=seed)
+        return dev_train, dev_test
