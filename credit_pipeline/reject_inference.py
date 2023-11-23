@@ -1,4 +1,7 @@
 import joblib
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 
 seed_number = 880
 
@@ -129,3 +132,66 @@ def accept_reject_split(data, threshold = 0.4, path = 'drive'):
     rejects = data[rej_prob >= threshold]
 
     return accepts, rejects
+
+def calculate_kickout_metric(C1, C2, X_test_acp, y_test_acp, X_test_unl, acp_rate = 0.15):
+    # Calculate predictions and obtain subsets A1_G and A1_B
+    num_acp_1 = int(len(X_test_acp) * acp_rate) #number of Accepts
+    y_prob_1 = C1.predict_proba(X_test_acp)[:, 1]
+    threshold = np.percentile(y_prob_1, 100 - (num_acp_1 / len(y_prob_1)) * 100)
+    y_pred_1 = (y_prob_1 > threshold).astype('int')
+    A1 = X_test_acp[y_pred_1 == 0]
+    A1_G = X_test_acp[(y_pred_1 == 0) & (y_test_acp == 0)]
+    A1_B = X_test_acp[(y_pred_1 == 0) & (y_test_acp == 1)]
+
+    X_test_holdout = pd.concat([X_test_acp, X_test_unl])
+
+    # Calculate predictions on X_test_holdout and obtain subset A2
+    num_Acp_2 = int(len(X_test_holdout) * acp_rate) #number of Accepts
+    y_prob_2 = C2.predict_proba(X_test_holdout)[:, 1]
+    threshold = np.percentile(y_prob_2, 100 - (num_Acp_2 / len(y_prob_2)) * 100)
+    y_pred_2 = (y_prob_2 > threshold).astype('int')
+    A2 = X_test_holdout[y_pred_2 == 0]
+
+    # Calculate indices of kicked-out good and bad samples
+    indices_KG = np.setdiff1d(A1_G.index, A2.index)
+    indices_KB = np.setdiff1d(A1_B.index, A2.index)
+
+    # Calculate the count of kicked-out good and bad samples
+    KG = A1_G.loc[indices_KG].shape[0]
+    KB = A1_B.loc[indices_KB].shape[0]
+
+    # Calculate the share of bad cases in A1
+    p_B = A1_B.shape[0] / A1.shape[0]
+
+    # Calculate the number of bad cases selected by the original model
+    SB = A1_B.shape[0]
+
+    # Calculate the kickout metric value
+    kickout = ((KB / p_B) - (KG / (1 - p_B))) / (SB / p_B)
+
+    return kickout, KG, KB
+
+def risk_score_threshold(model, X, y, plot = False, defaul_acceped = 0.04):
+    #calculate probabilities on validation set
+    y_probs = model.predict_proba(X)[:,1]
+    #sort index of probabilies on ascending order
+    sorted_clients = np.argsort(y_probs)
+    #calculate the comulative mean of the probabilities
+    cum_mean = np.cumsum(y.iloc[sorted_clients])/np.arange(1, y.shape[0]+1)
+    #turn to zero the first 1000 values to reduce noise
+    cum_mean[:1000] = np.zeros(1000)
+    #get the minimum threshold value that accepts until 4 percent default rate
+    thr_0 = y_probs[sorted_clients][np.argmin(abs(cum_mean-defaul_acceped))]
+
+    #plot the threshold x cum_mean graph
+    if plot:
+        plt.plot(y_probs[sorted_clients], cum_mean, '.')
+    return thr_0
+
+def calculate_approval_rate(C1, X_val, y_val, X_test):
+    threshold = risk_score_threshold(C1, X_val, y_val)
+    y_prob = C1.predict_proba(X_test)[:,1]
+    y_pred = (y_prob > threshold).astype(int)  # Convert probabilities to binary predictions
+    n_approved = (y_pred == 0).sum()
+
+    return n_approved/X_test.shape[0]
