@@ -107,7 +107,18 @@ cols_RI = ['AMT_CREDIT', 'EXT_SOURCE_1', 'EXT_SOURCE_2',
 
 def load_policy(path = 'drive'):
     if path == 'drive':
-        policy_model_path = "models/AR_policy.joblib"
+        policy_model_path = "./models/AR_policy.joblib"
+    else:
+        policy_model_path = path
+
+    loaded_policy = joblib.load(policy_model_path)
+    policy_model, policy_samples = loaded_policy.values()
+
+    return policy_model, policy_samples
+
+def load_policy_2(path = 'drive'):
+    if path == 'drive':
+        policy_model_path = "credit_pipeline/models/AR_policy.joblib"
     else:
         policy_model_path = path
 
