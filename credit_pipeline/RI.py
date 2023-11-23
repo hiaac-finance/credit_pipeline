@@ -122,7 +122,7 @@ def accept_reject_split(data, threshold = 0.4, path = 'drive'):
         policy_model_path = path
 
     loaded_policy = joblib.load(policy_model_path)
-    policy_model, policy_samples = loaded_policy.values()
+    policy_model = loaded_policy.values()[0]
 
     rej_prob = policy_model.predict_proba(data)[:,1]
     accepts = data[rej_prob < threshold]

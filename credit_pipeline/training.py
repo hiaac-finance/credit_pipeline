@@ -453,7 +453,21 @@ def ks_threshold(y_true, y_score):
     return opt_threshold
 
 def create_train_test(dataset, final = False, seed = 880, dev_test_size = 0.2):
-    #Do not change the following parameters neither the value of final
+    """ Splits a dataset betweeen a train set and development or deployment test.
+    
+    Parameters:
+    - dataset (DataFrame or array-like): The dataset to be split into train and test sets.
+    - final (bool): If True, indicates that the holdout test will be.
+                    If False, indicates that the development test will be returned (default: False).
+    - seed (int): Seed value for random state for development test (default: 880).
+    - dev_test_size (float): The proportion of the dataset to include in the development 
+    test split (default: 0.2).
+
+    Returns:
+    - Tuple: (train_set, test_set) - The training and testing datasets.
+    
+    """
+    #Do not change the following parameters neither the value of final to avoid data leakage
     train, holdout = train_test_split(dataset, test_size=0.2, random_state=880)
     if final:
         return train, holdout
