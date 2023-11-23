@@ -1,3 +1,7 @@
+import joblib
+
+seed_number = 880
+
 params_dict = {
     'RandomForest_1' : {'bootstrap': True, 'ccp_alpha': 0.0, 'class_weight': None,
                         'criterion': 'entropy', 'max_depth': 10, 'max_features': 'log2',
