@@ -2,6 +2,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import os
 
 seed_number = 880
 
@@ -106,7 +107,7 @@ cols_RI = ['AMT_CREDIT', 'EXT_SOURCE_1', 'EXT_SOURCE_2',
 
 def load_policy(path = 'drive'):
     if path == 'drive':
-        policy_model_path = "drive/Shareddrives/H.IAAC - AI in Finance/Models/AR_policy.joblib"
+        policy_model_path = "models/AR_policy.joblib"
     else:
         policy_model_path = path
 
@@ -120,7 +121,7 @@ def remove_policy_samples(data, policy_samples):
 
 def accept_reject_split(data, threshold = 0.4, path = 'drive'):
     if path == 'drive':
-        policy_model_path = "drive/Shareddrives/H.IAAC - AI in Finance/Models/AR_policy.joblib"
+        policy_model_path = "models/AR_policy.joblib"
     else:
         policy_model_path = path
 
