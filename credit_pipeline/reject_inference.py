@@ -4,6 +4,12 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import os
 
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_auc_score
+import credit_pipeline.training as tr
+
+from sklearn.model_selection import train_test_split
+
 seed_number = 880
 
 params_dict = {
@@ -105,45 +111,33 @@ cols_RI = ['AMT_CREDIT', 'EXT_SOURCE_1', 'EXT_SOURCE_2',
         'CNT_CHILDREN', 'CNT_FAM_MEMBERS', 'REG_CITY_NOT_WORK_CITY', 'AMT_GOODS_PRICE',
         'FLAG_OWN_CAR', 'NAME_EDUCATION_TYPE', 'NAME_CONTRACT_TYPE']
 
-def load_policy(path = 'drive'):
-    if path == 'drive':
-        policy_model_path = "./models/AR_policy.joblib"
-    else:
-        policy_model_path = path
+def fit_policy(dataset, test_size=0.2, random_state=880, show_eval_results = False):
+    df_train, df_policy = train_test_split(
+        dataset, test_size=0.2, random_state=random_state)
+    
+    X_pol = df_policy.loc[:, cherry_cols]
+    y_pol = df_policy["TARGET"]
+    X_train_pol, X_val_pol, y_train_pol, y_val_pol = train_test_split(
+                            X_pol, y_pol, test_size=0.2, random_state=random_state)
+    
+    policy_clf = tr.create_pipeline(X_train_pol, y_train_pol, 
+                                    LogisticRegression(**params_dict['LG_balanced']), onehot=False, do_EBE=True)
+    policy_clf.fit(X_train_pol, y_train_pol)
 
-    loaded_policy = joblib.load(policy_model_path)
-    policy_model, policy_samples = loaded_policy.values()
+    if show_eval_results:
+        val_prob = policy_clf.predict_proba(X_val_pol)[:,1]
+        print(roc_auc_score(y_val_pol, val_prob))
+    
+    return  df_train, policy_clf
 
-    return policy_model, policy_samples
-
-def load_policy_2(path = 'drive'):
-    if path == 'drive':
-        policy_model_path = "credit_pipeline/models/AR_policy.joblib"
-    else:
-        policy_model_path = path
-
-    loaded_policy = joblib.load(policy_model_path)
-    policy_model, policy_samples = loaded_policy.values()
-
-    return policy_model, policy_samples
-
-def remove_policy_samples(data, policy_samples):
-    return data[~data['SK_ID_CURR'].isin(policy_samples)]
-
-def accept_reject_split(data, threshold = 0.4, path = 'drive'):
-    if path == 'drive':
-        policy_model_path = "models/AR_policy.joblib"
-    else:
-        policy_model_path = path
-
-    loaded_policy = joblib.load(policy_model_path)
-    policy_model = loaded_policy.values()[0]
-
-    rej_prob = policy_model.predict_proba(data)[:,1]
-    accepts = data[rej_prob < threshold]
-    rejects = data[rej_prob >= threshold]
+def accept_reject_split(dataset, policy_clf, threshold = 0.4):
+    rej_prob = policy_clf.predict_proba(dataset)[:,1]
+    accepts = dataset[rej_prob < threshold]
+    rejects = dataset[rej_prob >= threshold]
 
     return accepts, rejects
+
+#Metrics
 
 def calculate_kickout_metric(C1, C2, X_test_acp, y_test_acp, X_test_unl, acp_rate = 0.15):
     # Calculate predictions and obtain subsets A1_G and A1_B
