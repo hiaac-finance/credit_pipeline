@@ -382,30 +382,35 @@ def optimize_model(
     This function creates an Optuna study to search for the best hyperparameters for a given machine learning model from a specified parameter space. The objective of the study is to maximize the ROC score of the model on the validation score. It can work with a provided validation set or with cross-validation.
     Parameter spaces for LogisticRegression, RandomForestClassifier, LGBMClassifier, and MLPClassifier are provided by default. For any model, a custom parameter space can be provided.
 
-    :param model_class: The class of the machine learning model to be trained
-    :type model_class: class with sklearn API
-    :param param_space: description of parameter spaces, pass string "suggest" to use default spaces
-    :type param_space: dict with param spaces or string "suggest"
-    :param X_train: Training data features.
-    :type X_train: pandas.DataFrame or numpy.ndarray
-    :param y_train: Training data target.
-    :type y_train: array-like
-    :param X_val: Validation data features.
-    :type X_val: pandas.DataFrame or numpy.ndarray
-    :param y_val: Validation data target.
-    :type y_val: array-like
-    :param cv: number of folds for cross-validation, defaults to 5
-    :type cv: int, optional
-    :param pipeline_params: parameters to call pipeline, defaults to {}
-    :type pipeline_params: dict, optional
-    :param n_trials: number of trials, defaults to 100
-    :type n_trials: int, optional
-    :param timeout: number of seconds, defaults to None
-    :type timeout: int, optional
-    :param seed_number: random seed, defaults to 0
-    :type seed_number: int, optional
-    :return: study and model
-    :rtype: optuna.study.Study, sklearn.pipeline.Pipeline
+    Parameters
+    ----------
+
+    model_class : class with sklearn API
+        The class of the machine learning model to be trained.
+    param_space: dict with param spaces or string "suggest"
+        description of parameter spaces, pass string "suggest" to use default spaces
+    X_train: pandas.DataFrame or numpy.ndarray
+        Training data features.
+    y_train: array-like
+        Training data target.
+    X_val: pandas.DataFrame or numpy.ndarray, default=None
+        Validation data features.
+    y_val: array-like, default=None
+        Validation data target. 
+    cv: int, optional, default=5
+        Number of folds for cross-validation
+    pipeline_params: dict, optional, default={}
+        Parameters to call pipeline.
+    n_trials: int, default=100
+        Number of trials.
+    timeout: int, optional, default=None
+        Number of seconds
+    seed_number: int, default=0
+        Random seed number.
+    
+    Returns
+    -------
+    (optuna.study.Study, sklearn.pipeline.Pipeline) - study and model
     """
     if param_space == "suggest":
         if model_class.__name__ in hyperparam_spaces.keys():
