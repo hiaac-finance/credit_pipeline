@@ -27,35 +27,31 @@ MODEL_CLASS_LIST = [
 ]
 
 
-def load_split(dataset_name, fold, validation=False, seed=0):
+def load_split(dataset_name, fold, seed=0):
     """Function that loads the dataset and splits it into train and test.
+    It splits the train set into train and validation using 10-fold cross validation.
 
-    :param dataset_name: name of the dataset
-    :type dataset_name: string
-    :param fold: fold number in the 10-fold cross validation
-    :type fold: int
-    :param validation: whether to split train into train and validation, defaults to False
-    :type validation: bool, optional
-    :param seed: random seed, defaults to 0
-    :type seed: int, optional
-    :return: train and test sets, and validation set if validation is True
-    :rtype: pandas.DataFrame
+    Args:
+        dataset_name (string): name of the dataset in ["german", "taiwan", "homecredit"]
+        fold (int): fold number in the 10-fold cross validation
+        seed (int, optional): random seed. Defaults to 0.
+
+    Returns:
+        pandas.DataFrame: train, validation and test sets
     """
     df = data.load_dataset(dataset_name)
-    X = df.drop("DEFAULT", axis=1)
-    Y = df.DEFAULT
+    train, test = training.create_train_test(df, final=False, seed=seed)
+    X_train_ = train.drop(columns=["DEFAULT"])
+    Y_train_ = train["DEFAULT"]
+    X_test = test.drop(columns=["DEFAULT"])
+    Y_test = test["DEFAULT"]
     kf = KFold(n_splits=10, shuffle=True, random_state=seed)
-    for i, (train_index, test_index) in enumerate(kf.split(X)):
+    for i, (train_index, val_index) in enumerate(kf.split(X_train_)):
         if i == fold:
-            X_train, X_test = X.iloc[train_index], X.iloc[test_index]
-            Y_train, Y_test = Y.iloc[train_index], Y.iloc[test_index]
-
-            if validation:
-                X_train, X_val, Y_train, Y_val = train_test_split(
-                    X_train, Y_train, test_size=1 / 9, random_state=seed
-                )
-            else:
-                X_val, Y_val = None, None
+            X_train = X_train_.iloc[train_index]
+            Y_train = Y_train_.iloc[train_index]
+            X_val = X_train_.iloc[val_index]
+            Y_val = Y_train_.iloc[val_index]
             break
     return X_train, Y_train, X_val, Y_val, X_test, Y_test
 
@@ -73,7 +69,7 @@ def experiment_credit_models(args):
         Path(f"../results/{args['dataset']}/{fold}").mkdir(parents=True, exist_ok=True)
         print("Fold: ", fold)
         X_train, Y_train, X_val, Y_val, X_test, Y_test = load_split(
-            args["dataset"], fold, args["validation"], args["seed"]
+            args["dataset"], fold, args["seed"]
         )
         for model_class in MODEL_CLASS_LIST:
             print("Model: ", model_class.__name__)
@@ -84,12 +80,12 @@ def experiment_credit_models(args):
                 Y_train,
                 X_val,
                 Y_val,
-                cv=None if args["validation"] else 5,
+                cv=None,
                 n_trials=args["n_trials"],
                 timeout=args["timeout"],
             )
-            Y_pred = model.predict_proba(X_val)[:, 1]
-            threshold = training.ks_threshold(Y_val, Y_pred)
+            Y_pred = model.predict_proba(X_train)[:, 1]
+            threshold = training.ks_threshold(X_train, Y_pred)
             model_dict = {model_class.__name__: [model, threshold]}
             metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
 
@@ -108,7 +104,9 @@ def experiment_credit_models(args):
             )
 
     metrics = [
-        pd.read_csv(f"../results/{args['dataset']}/{fold}/{model_class.__name__}_metrics.csv")
+        pd.read_csv(
+            f"../results/{args['dataset']}/{fold}/{model_class.__name__}_metrics.csv"
+        )
         for fold in range(10)
         for model_class in MODEL_CLASS_LIST
     ]
@@ -215,12 +213,6 @@ if __name__ == "__main__":
         type=int,
         default=90,
         help="timeout in seconds for the hyperparameter optimization",
-    )
-    parser.add_argument(
-        "--validation",
-        type=bool,
-        default=False,
-        help="whether to split train into train and validation or use 5-fold cross validation",
     )
 
     args = vars(parser.parse_args())
