@@ -28,8 +28,7 @@ MODEL_CLASS_LIST = [
 
 
 def load_split(dataset_name, fold, seed=0):
-    """Function that loads the dataset and splits it into train and test.
-    It splits the train set into train and validation using 10-fold cross validation.
+    """Function that loads the dataset and splits it into train and test. Following, splits the train set into train and validation using 10-fold cross validation.
 
     Args:
         dataset_name (string): name of the dataset in ["german", "taiwan", "homecredit"]
