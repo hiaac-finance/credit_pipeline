@@ -1,5 +1,8 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import math
 from sklearn.metrics import (
     confusion_matrix,
     balanced_accuracy_score,
@@ -10,6 +13,73 @@ from sklearn.metrics import (
     roc_auc_score,
     brier_score_loss,
 )
+
+def plot_confusion_matrix(y_true, y_pred):
+    """
+    Compute and plot confusion matrix given true values and predictions.
+    """
+    # Compute confusion matrix
+    cm = confusion_matrix(y_true, y_pred)
+
+    print("Accuracy of the model is: ", accuracy_score(y_true, y_pred))
+
+    # Plot confusion matrix
+    sns.heatmap(cm, annot=True, cmap='Blues', fmt='g')
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.show()
+
+
+def plot_prob_distribution(y_true, y_prob):
+    """
+    Compute and distributions of probs by target given true values and probabilities.
+    """
+    plt.hist(y_prob[y_true==1], bins=20, alpha=0.5, label='1', density=True)
+    plt.hist(y_prob[y_true==0], bins=20, alpha=0.5, label='0', density=True)
+    plt.xlabel('Predicted probability')
+    plt.ylabel('Frequency')
+    plt.legend(loc='upper center')
+    plt.show()
+
+def plot_prob_distribution_from_list(y_true, y_prob_list):
+    """
+    Compute and distributions of probs by target given 
+    true values and a list of probabilities.
+    """
+    num_plots = len(y_prob_list)
+    num_cols = math.ceil(math.sqrt(num_plots))
+    num_rows = math.ceil(num_plots / num_cols)
+
+    fig, axs = plt.subplots(num_rows, num_cols, figsize=(12, 8))
+
+    for i, y_prob in enumerate(y_prob_list):
+        row = i // num_cols
+        col = i % num_cols
+
+        if num_rows == 1 and num_cols == 1:
+            axs.hist(y_prob[y_true == 1], bins=20, alpha=0.5, label='1', density=True)
+            axs.hist(y_prob[y_true == 0], bins=20, alpha=0.5, label='0', density=True)
+            axs.set_xlabel('Predicted probability')
+            axs.set_ylabel('Frequency')
+            axs.legend(loc='upper center')
+        else:
+            axs[row, col].hist(y_prob[y_true == 1], bins=20, alpha=0.5, label='1', density=True)
+            axs[row, col].hist(y_prob[y_true == 0], bins=20, alpha=0.5, label='0', density=True)
+            axs[row, col].set_xlabel('Predicted probability')
+            axs[row, col].set_ylabel('Frequency')
+            axs[row, col].legend(loc='upper center')
+
+    # Hide unused subplots
+    for i in range(len(y_prob_list), num_rows * num_cols):
+        row = i // num_cols
+        col = i % num_cols
+        if num_rows == 1 and num_cols == 1:
+            axs.axis('off')
+        else:
+            axs[row, col].axis('off')
+
+    plt.tight_layout()
+    plt.show()
 
 
 def false_positive_rate(y_true, y_pred):
