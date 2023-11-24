@@ -130,29 +130,16 @@ def fit_policy(dataset, test_size=0.2, random_state=880, show_eval_results = Fal
     
     return  df_train, policy_clf
 
-def accept_reject_split(dataset, policy_clf, threshold = 0.4):
-    """A function to split a credit dataset into accepts and rejects.
 
-    Parameters
-    ----------
-    dataset : Pandas dataframe
-        The dataset to be split
-    policy_clf : sklearn model or sklearn pipeline
-        A classifier fitted with binary output
-    threshold : float, optional
-        Classification threshold, by default 0.4
+def accept_reject_split(X,y, policy_clf = None, threshold = 0.4):
+    rej_prob = policy_clf.predict_proba(X)[:,1]
 
-    Returns
-    -------
-    Pandas dataframe
-        An accept and a reject dataset
-    """
+    X_accepts = X[rej_prob < threshold][ri.cols_RI]
+    X_rejects = X[rej_prob >= threshold][ri.cols_RI]
+    y_accepts = y[rej_prob < threshold]
+    y_rejects = y[rej_prob >= threshold]
 
-    rej_prob = policy_clf.predict_proba(dataset)[:,1]
-    accepts = dataset[rej_prob < threshold]
-    rejects = dataset[rej_prob >= threshold]
-
-    return accepts, rejects
+    return X_accepts, X_rejects, y_accepts, y_rejects
 
 #Metrics
 
