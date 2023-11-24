@@ -263,6 +263,33 @@ def list_by_type(dataframe, types_cols, debug=False):
                 print("---------------")
 
     return list_cols
+ 
+def columns_by_type(dataframe, types_cols = ['numeric'], debug=False):
+    """
+    Function to return columns from the same type or category
+    """
+    list_cols = []
+    if types_cols == ['numeric']:
+        types_cols = ['b','i','u','f','c']
+    elif types_cols == ['categorical']:
+        types_cols = ['O', 'S', 'U']
+
+    # Iterate through each column in the DataFrame
+    for c in dataframe.columns:
+        col = dataframe[c]
+
+        # Check if the column's data type matches any of the specified data types
+        if (col.dtype.kind in types_cols) or (col.dtype in types_cols):
+            list_cols.append(c)
+
+            # Print debugging information if debug flag is enabled
+            if debug:
+                print(c, ' : ', col.dtype)
+                print(col.unique()[:10])
+                print('---------------')
+
+    return list_cols
+
 
 
 def types_columns(dataframe):
@@ -298,26 +325,39 @@ def types_columns(dataframe):
     # Convert the set of unique data types to a list
     return list(listTypes)
 
-#@title function for get shapes
-def get_shapes(arrays):
+def get_shapes(*arrays, print_info = True):
+    """Function for get shapes of functions.
+
+    Parameters
+    ----------
+    print_info : bool, optional
+        _description_, by default True
+
+    Returns
+    -------
+    _type_
+        _description_
+    """    
+    import inspect
     shape_dict = {}
-    
     variables_before = inspect.currentframe().f_back.f_locals
     def variable_to_str(var):
         for name, value in variables_before.items():
             if value is var:
                 return name
-    if isinstance(arrays, (list, tuple)):
-        for arr in arrays:
-            name = variable_to_str(arr)
-            print(name,':', arr.shape)
+    for arr in arrays:
+        name = variable_to_str(arr)
+        if hasattr(arr, 'shape'):
+            if print_info:
+                print(name,':', arr.shape)
             shape_dict[name] = arr.shape
-    elif hasattr(arrays, 'shape'):
-        name = variable_to_str(arrays)
-        print(name,':', arrays.shape)
-        shape_dict[name] = arrays.shape
+        elif hasattr(arr, '__len__'):
+            if print_info:
+                print(name,':', len(arr))
+            shape_dict[name] = len(arr)
 
-    return shape_dict
+    if not print_info:
+        return shape_dict
 
 def list_by_unbalanced(dataframe, crit=0.7):
     """
