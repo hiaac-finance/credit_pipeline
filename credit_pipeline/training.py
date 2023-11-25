@@ -65,10 +65,7 @@ hyperparam_spaces = {
         "class_weight": {"choices": [None, "balanced"], "type": "categorical"},
     },
 }
-hyperparam_spaces["FairGBMClassifier"] = hyperparam_spaces["LGBMClassifier"].copy()
-hyperparam_spaces["FairGBMClassifier"]["multiplier_learning_rate"] = {
-    "low": 0.01, "high" : 1, "type": "float",
-}
+
 
 
 
