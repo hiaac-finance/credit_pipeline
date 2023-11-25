@@ -1,5 +1,6 @@
 import argparse
 import joblib
+import numpy as np
 import pandas as pd
 from pathlib import Path
 from sklearn.linear_model import LogisticRegression
@@ -75,9 +76,10 @@ def experiment_credit_models(args):
     ----------
         args (dict): arguments for the experiment
     """
+    path = f"../results/credit_models/{args['dataset']}"
 
     for fold in range(10):
-        Path(f"../results/{args['dataset']}/{fold}").mkdir(parents=True, exist_ok=True)
+        Path(f"{path}/{fold}").mkdir(parents=True, exist_ok=True)
         print("Fold: ", fold)
         X_train, Y_train, X_val, Y_val, X_test, Y_test = load_split(
             args["dataset"], fold, args["seed"]
@@ -102,32 +104,27 @@ def experiment_credit_models(args):
 
             # save results
             print(f"Finished training with ROC {study.best_value:.2f}")
-            joblib.dump(
-                model, f"../results/{args['dataset']}/{fold}/{model_class.__name__}.pkl"
-            )
+            joblib.dump(model, f"{path}/{fold}/{model_class.__name__}.pkl")
             joblib.dump(
                 study,
-                f"../results/{args['dataset']}/{fold}/{model_class.__name__}_study.pkl",
+                f"{path}/{fold}/{model_class.__name__}_study.pkl",
             )
             metrics.to_csv(
-                f"../results/{args['dataset']}/{fold}/{model_class.__name__}_metrics.csv",
+                f"{path}/{fold}/{model_class.__name__}_metrics.csv",
                 index=False,
             )
 
     metrics = [
-        pd.read_csv(
-            f"../results/{args['dataset']}/{fold}/{model_class.__name__}_metrics.csv"
-        )
+        pd.read_csv(f"{path}/{fold}/{model_class.__name__}_metrics.csv")
         for fold in range(10)
         for model_class in MODEL_CLASS_LIST
     ]
     metrics = pd.concat(metrics)
-    metrics.groupby("model").mean().to_csv(
-        f"../results/{args['dataset']}/metrics_mean.csv"
-    )
-    metrics.groupby("model").std().to_csv(
-        f"../results/{args['dataset']}/metrics_std.csv"
-    )
+    metrics_mean = metrics.groupby("model").mean()
+    metrics_std = metrics.groupby("model").std()
+    # join mean and std
+    metrics = metrics_mean.join(metrics_std, lsuffix="_mean", rsuffix="_std")
+    metrics.groupby("model").mean().to_csv(f"{path}/metrics.csv")
 
 
 def experiment_fairness(args):
@@ -139,10 +136,9 @@ def experiment_fairness(args):
     Args:
         args (dict): arguments for the experiment
     """
+    path = f"../results/fair_models/{args['dataset']}"
     for fold in range(10):
-        Path(f"../results/{args['dataset']}/fairness/{fold}").mkdir(
-            parents=True, exist_ok=True
-        )
+        Path(f"{path}/{fold}").mkdir(parents=True, exist_ok=True)
         print("Fold: ", fold)
         X_train, Y_train, X_val, Y_val, X_test, Y_test = load_split(
             args["dataset"], fold, args["seed"]
@@ -184,33 +180,85 @@ def experiment_fairness(args):
             threshold = training.ks_threshold(Y_train, Y_pred)
             model_dict = {model_class.__name__: [model, threshold]}
             metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
+            fairness_metrics = ...
 
-            # save results
+            joblib.dump(model, f"{path}/{fold}/rw_{model_class.__name__}.pkl")
+            joblib.dump(
+                study,
+                f"{path}/{fold}/rw_{model_class.__name__}_study.pkl",
+            )
+            metrics.to_csv(
+                f"{path}/{fold}/rw_{model_class.__name__}_metrics.csv",
+                index=False,
+            )
+            fairness_metrics.to_csv(
+                f"{path}/{fold}/rw_{model_class.__name__}_fairness_metrics.csv",
+                index=False,
+            )
+
             print(f"Finished training with ROC {study.best_value:.2f}")
 
-
-        raise NotImplementedError
-
         for model_class in [DemographicParityClassifier, EqualOpportunityClassifier]:
-            sensitive_col_idx = ...
-            param_space = {
-                "sensitive_col_idx": sensitive_col_idx,
-                "positive_target": 0,
-            }
+            print("Model: ", model_class.__name__)
+            pipeline = training.create_pipeline(X_train, Y_train)
+            pipeline.fit(X_train, Y_train)
+            output_columns = pipeline.transform(X_train).columns.to_numpy()
+            del pipeline
+            sensitive_col_idx = np.where(
+                output_columns == PROTECTED_ATTRIBUTES[args["dataset"]]
+            )[0][0]
 
+            param_space = ...
+            param_space["senstive_cols"] = sensitive_col_idx
+            param_space["positive_target"] = 0
             study, model = training.optimize_model(
+                model_class,
+                ...,
                 X_train,
                 Y_train,
                 X_val,
                 Y_val,
-                model_class,
+                cv=None,
                 n_trials=args["n_trials"],
                 timeout=args["timeout"],
             )
+            Y_pred = model.predict_proba(X_train)[:, 1]
+            threshold = training.ks_threshold(Y_train, Y_pred)
+            model_dict = {model_class.__name__: [model, threshold]}
+            metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
+            fairness_metrics = ...
 
-            # SAVE RESULTS # TODO
+            joblib.dump(model, f"{path}/{fold}/{model_class.__name__}.pkl")
+            joblib.dump(
+                study,
+                f"{path}/{fold}/{model_class.__name__}_study.pkl",
+            )
+            metrics.to_csv(
+                f"{path}/{fold}/{model_class.__name__}_metrics.csv",
+                index=False,
+            )
+            fairness_metrics.to_csv(
+                f"{path}/{fold}/{model_class.__name__}_fairness_metrics.csv",
+                index=False,
+            )
 
-        study, model = training.optimize_model(X_train, Y_train, FairGBMClassifier)
+            print(f"Finished training with ROC {study.best_value:.2f}")
+        
+        model_class = FairGBMClassifier
+        print("Model: ", model_class.__name__)
+        A_train = X_train[PROTECTED_ATTRIBUTES[args["dataset"]]]
+        study, model = training.optimize_model(
+            model_class,
+            ...,
+            X_train,
+            Y_train,
+            X_val,
+            Y_val,
+            cv=None,
+            fit_params = {"classifier__constraint_group" : A_train},
+            n_trials=args["n_trials"],
+            timeout=args["timeout"],
+        )
 
 
 if __name__ == "__main__":
