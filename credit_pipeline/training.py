@@ -212,6 +212,7 @@ def create_pipeline(
             (
                 "cat",
                 OrdinalEncoder(
+                    dtype=np.int64,
                     handle_unknown="use_encoded_value",
                     unknown_value=-1,
                     encoded_missing_value=-1,
@@ -223,6 +224,7 @@ def create_pipeline(
                 EBE()
                 if do_EBE
                 else OrdinalEncoder(
+                    dtype=np.int64,
                     handle_unknown="use_encoded_value",
                     unknown_value=-1,
                     encoded_missing_value=-1,
