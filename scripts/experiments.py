@@ -4,7 +4,6 @@ import pandas as pd
 from pathlib import Path
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.neural_network import MLPClassifier
 from lightgbm import LGBMClassifier
 from aif360.datasets import BinaryLabelDataset
 from aif360.algorithms.preprocessing import Reweighing
@@ -13,6 +12,7 @@ from sklego.linear_model import DemographicParityClassifier, EqualOpportunityCla
 from fairlearn.postprocessing import ThresholdOptimizer
 from sklearn.model_selection import train_test_split, KFold
 from credit_pipeline import data, training, evaluate
+from credit_pipeline.models import MLPClassifier
 
 
 import warnings
@@ -26,16 +26,27 @@ MODEL_CLASS_LIST = [
     LGBMClassifier,
 ]
 
+PROTECTED_ATTRIBUTES = {
+    "german": "Gender_0",
+    "taiwan": ...,
+    "homecredit": ...,
+}
+
 
 def load_split(dataset_name, fold, seed=0):
     """Function that loads the dataset and splits it into train and test. Following, splits the train set into train and validation using 10-fold cross validation.
 
-    Args:
-        dataset_name (string): name of the dataset in ["german", "taiwan", "homecredit"]
-        fold (int): fold number in the 10-fold cross validation
-        seed (int, optional): random seed. Defaults to 0.
+    Parameters
+    ----------
+        dataset_name : string
+            Name of the dataset in ["german", "taiwan", "homecredit"]
+        fold : int
+            Fold number in the 10-fold cross validation
+        seed : int, optional
+            Random seed. Defaults to 0.
 
-    Returns:
+    Returns
+    -------
         pandas.DataFrame: train, validation and test sets
     """
     df = data.load_dataset(dataset_name)
@@ -60,8 +71,9 @@ def experiment_credit_models(args):
     It will fit Logistic, MLP, Random Forest and LightGBM models to any of the datasets in the data folder.
     It will save the models and the metrics in the results folder.
 
-    :param args: arguments for the experiment
-    :type args: dict
+    Parameters
+    ----------
+        args (dict): arguments for the experiment
     """
 
     for fold in range(10):
@@ -84,7 +96,7 @@ def experiment_credit_models(args):
                 timeout=args["timeout"],
             )
             Y_pred = model.predict_proba(X_train)[:, 1]
-            threshold = training.ks_threshold(X_train, Y_pred)
+            threshold = training.ks_threshold(Y_train, Y_pred)
             model_dict = {model_class.__name__: [model, threshold]}
             metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
 
@@ -124,41 +136,60 @@ def experiment_fairness(args):
     It will also fit Reweighting, Demographic Parity and Equalized Odds classifier, FairGBM and Threshold Optimizer.
     It will save the models and the metrics in the results folder.
 
-    :param args: arguments for the experiment
-    :type args: dict
+    Args:
+        args (dict): arguments for the experiment
     """
     for fold in range(10):
-        Path(f"../results/{args['dataset']}/{fold}").mkdir(parents=True, exist_ok=True)
+        Path(f"../results/{args['dataset']}/fairness/{fold}").mkdir(
+            parents=True, exist_ok=True
+        )
         print("Fold: ", fold)
         X_train, Y_train, X_val, Y_val, X_test, Y_test = load_split(
             args["dataset"], fold, args["seed"]
         )
 
         # Reweighting
-        print("Model: Reweighting")
+        print("Model: Reweighing")
         pipeline_preprocess = training.create_pipeline(X_train, Y_train)
         pipeline_preprocess.fit(X_train, Y_train)
         X_train_preprocessed = pipeline_preprocess.transform(X_train)
         df_rw = pd.DataFrame(X_train_preprocessed)
         df_rw["DEFAULT"] = Y_train
         X_train_aif = BinaryLabelDataset(
-            df=df_rw, label_names=["DEFAULT"], protected_attribute_names=...  # TODO
+            df=df_rw,
+            label_names=["DEFAULT"],
+            protected_attribute_names=[PROTECTED_ATTRIBUTES[args["dataset"]]],
         )
-        rw = Reweighing(unprivileged_groups=..., privileged_groups=...)  # TODO
+        rw = Reweighing(
+            unprivileged_groups=[{PROTECTED_ATTRIBUTES[args["dataset"]]: 0}],
+            privileged_groups=[{PROTECTED_ATTRIBUTES[args["dataset"]]: 1}],
+        )
         rw.fit(X_train_aif)
         rw_weights = rw.transform(X_train_aif).instance_weights
         for model_class in MODEL_CLASS_LIST:
+            print("Model: ", model_class.__name__)
             study, model = training.optimize_model(
+                model_class,
+                "suggest",
                 X_train,
                 Y_train,
                 X_val,
                 Y_val,
-                model_class,
+                cv=None,
+                fit_params={"classifier__sample_weight": rw_weights},
                 n_trials=args["n_trials"],
                 timeout=args["timeout"],
             )
+            Y_pred = model.predict_proba(X_train)[:, 1]
+            threshold = training.ks_threshold(Y_train, Y_pred)
+            model_dict = {model_class.__name__: [model, threshold]}
+            metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
 
-            # SAVE RESULTS # TODO
+            # save results
+            print(f"Finished training with ROC {study.best_value:.2f}")
+
+
+        raise NotImplementedError
 
         for model_class in [DemographicParityClassifier, EqualOpportunityClassifier]:
             sensitive_col_idx = ...
