@@ -196,6 +196,48 @@ def geometric_mean_accuracy(y_true, y_pred, z):
         * accuracy_score(y_true[z == 0], y_pred[z == 0])
     )
 
+def create_eod_scorer(z, benefit_class=1):
+    """Create a scorer for equal opportunity difference. The scorer can be used in hyperparameter tuning.
+
+    Parameters
+    ----------
+    z : array-like
+        Sensitive attribute to be used in the scorer, it must be in the same order as the data used to generate the prediction.
+    benefit_class : int, optional
+        Label of positive class to calculate metric, by default 1
+    """
+    def eod_scorer(y_true, y_pred):
+        y_true_ = (y_true == benefit_class).astype("float")
+        y_pred_ = (y_pred == benefit_class).astype("float")
+        return equal_opportunity(y_true_, y_pred_, z)
+    
+    return eod_scorer
+
+def create_fairness_scorer(fairness_goal, z, benefit_class=1):
+    """Create a scorer for fairness metrics. The scorer can be used in hyperparameter tuning.
+    
+    It will return the value of the roc auc if the fairness goal is reached, otherwise it will return a low value.
+
+    Parameters
+    ----------
+    fairness_goal : float
+        Value of the fairness metric to be reached. The lower the value, the more fair the model.
+    z : array-like
+        Sensitive attribute to be used in the scorer, it must be in the same order as the data used to generate the prediction.
+    benefit_class : int, optional
+        Label of positive class to calculate metric, by default 1
+    """
+    M = 100
+    def fairness_scorer(y_true, y_pred):
+        y_true_ = (y_true == benefit_class).astype("float")
+        y_pred_ = (y_pred == benefit_class).astype("float")
+        fairness_score = np.abs(equal_opportunity(y_true_, y_pred_, z))
+        if fairness_score <= fairness_goal:
+            return roc_auc_score(y_true_, y_pred_)
+        else:
+            return roc_auc_score(y_true_, y_pred_) - M * abs(fairness_score - fairness_goal)
+    return fairness_scorer
+
 
 def get_metrics(name_model_dict, X, y, threshold=0.5):
     """Calculate metrics for a set of models. The metrics are returned in a dataframe. The input must be a dict with model names, and the values can be a model or a tuple with model and threshold. If the threshold is not provided, the default value is 0.5.
