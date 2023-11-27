@@ -281,6 +281,7 @@ def objective(
     model_class,
     pipeline_params,
     fit_params,
+    score_func,
     param_space,
     X_train,
     y_train,
@@ -289,49 +290,43 @@ def objective(
     cv,
     seed_number=0,
 ):
-    """
-    Objective function for optimizing machine learning models using Optuna. This function serves as the objective for an Optuna study, aiming to find the best hyperparameters
+    """Objective function for optimizing machine learning models using Optuna. This function serves as the objective for an Optuna study, aiming to find the best hyperparameters
     for a machine learning model from a given parameter space. It initializes the model with hyperparameters
     suggested by Optuna, trains it, and then evaluates it using a specified scoring metric.
 
+    Parameters
+    ----------
+    trial : optuna.trial.Trial
+        The trial instance from optuna.create_study().
+    model_class : class with sklearn API
+        The class of the machine learning model to be trained.
+    pipeline_params : dict
+        Parameters to call pipeline.
+    fit_params : dict
+        Parameters that are used when calling fit.
+    score_func : function or str
+        Scoring function to use, must be according to sklearn API. If string, it must be one in ["roc_auc"].
+    param_space : dict
+        Description of parameter spaces.
+    X_train : array-like
+        Training data features.
+    y_train : array-like
+        Training data target.
+    X_val : array-like or None
+        Validation data features.
+    y_val : array-like or None
+        Validation data target.
+    cv : int
+        Number of folds for cross-validation if validation set is not provided.
+    seed_number : int, optional
+        Random seed, by default 0
 
-    :param trial: The trial instance from Optuna.
-    :type trial: optuna.trial.Trial
-    :param model_class: The class of the machine learning model to be trained.
-    :type model_class: class with sklearn API
-    :param pipeline_params: parameters of pipeline
-    :type pipeline_params: dict
-    :param fit_params: parameters to call fit, defaults to {}
-    :type fit_params: dict, optional
-    :param param_space: description of parameter spaces
-    :type param_space: dict
-    :param X_train: Training data features.
-    :type X_train: pandas.DataFrame or numpy.ndarray
-    :param y_train: Training data target.
-    :type y_train: pandas.Series or numpy.ndarray
-    :param X_val: Validation data features.
-    :type X_val: pandas.DataFrame or numpy.ndarray
-    :param y_val: Validation data target.
-    :type y_val: pandas.Series or numpy.ndarray
-    :param cv: number of folds for cross-validation if validation is not provided, defaults to 5
-    :type cv: int
-    :param seed_number: random seed, defaults to 0
-    :type seed_number: int, optional
-    :return: score of the model with validation or mean score with cross-validation
-    :rtype: float
+    Returns
+    -------
+    float
+        The score of the model on the validation set.
 
-    :Example:
-
-    >>> from sklearn.ensemble import RandomForestRegressor
-    >>> from sklearn.metrics import mean_squared_error
-    >>> param_space = {
-    ...     'n_estimators': (10, 100, 10),
-    ...     'max_depth': (3, 10),
-    ...     'min_samples_split': [2, 3, 4]
-    ... }
-    >>> objective(trial, RandomForestRegressor, param_space, X_train, y_train, mean_squared_error)
     """
-    # Extract hyperparameters from the parameter space
     params = {}
     for name, values in param_space.items():
         if values["type"] == "int":
@@ -346,6 +341,9 @@ def objective(
 
     params["random_state"] = seed_number
 
+    if type(score_func) == str and score_func == "roc_auc":
+        score_func = roc_auc_score
+
     if X_val is not None and y_val is not None:
         # Initialize and train the model
         model = create_pipeline(
@@ -355,7 +353,7 @@ def objective(
 
         # Predict and evaluate the model
         predictions = model.predict_proba(X_val)[:, 1]
-        score = roc_auc_score(y_val, predictions)
+        score = score_func(y_val, predictions)
     else:
         if fit_params != {}:
             raise ValueError("fit_params can only be specified with validation set")
@@ -369,7 +367,7 @@ def objective(
             )
             model.fit(X_train_fold, y_train_fold)
             predictions = model.predict_proba(X_val_fold)[:, 1]
-            score.append(roc_auc_score(y_val_fold, predictions))
+            score.append(score_func(y_val_fold, predictions))
         score = np.mean(score)
 
     return score
@@ -385,6 +383,7 @@ def optimize_model(
     cv=5,
     pipeline_params={},
     fit_params = {},
+    score_func = "roc_auc",
     n_trials=None,
     timeout=None,
     seed_number=0,
@@ -412,6 +411,10 @@ def optimize_model(
         Number of folds for cross-validation
     pipeline_params: dict, optional, default={}
         Parameters to call pipeline.
+    fit_params: dict, optional, default={}
+        Parameters that are used when calling fit.
+    score_func: str, default="roc_auc"
+        Scoring function to use, must be according to sklearn API.
     n_trials: int, default=100
         Number of trials.
     timeout: int, optional, default=None
@@ -438,6 +441,7 @@ def optimize_model(
             model_class,
             pipeline_params,
             fit_params,
+            score_func,
             param_space,
             X_train,
             y_train,
