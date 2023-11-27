@@ -1,14 +1,16 @@
-import joblib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import os
-
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import roc_auc_score
-import credit_pipeline.training as tr
 
 from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
+                            f1_score, precision_score, recall_score,
+                            roc_auc_score, roc_curve)
+from scipy.stats import ks_2samp
+
+import credit_pipeline.training as tr
+
 
 seed_number = 880
 
@@ -111,14 +113,14 @@ cols_RI = ['AMT_CREDIT', 'EXT_SOURCE_1', 'EXT_SOURCE_2',
         'CNT_CHILDREN', 'CNT_FAM_MEMBERS', 'REG_CITY_NOT_WORK_CITY', 'AMT_GOODS_PRICE',
         'FLAG_OWN_CAR', 'NAME_EDUCATION_TYPE', 'NAME_CONTRACT_TYPE']
 
-def fit_policy(dataset, test_size=0.2, random_state=880, show_eval_results = False):
+def fit_policy(dataset, eval_size=0.2, random_state=880, show_eval_results = False):
     df_train, df_policy = train_test_split(
         dataset, test_size=0.2, random_state=random_state)
     
     X_pol = df_policy.loc[:, cherry_cols]
     y_pol = df_policy["TARGET"]
     X_train_pol, X_val_pol, y_train_pol, y_val_pol = train_test_split(
-                            X_pol, y_pol, test_size=0.2, random_state=random_state)
+                            X_pol, y_pol, test_size=eval_size, random_state=random_state)
     
     policy_clf = tr.create_pipeline(X_train_pol, y_train_pol, 
                                     LogisticRegression(**params_dict['LG_balanced']), onehot=False, do_EBE=True)
@@ -131,7 +133,7 @@ def fit_policy(dataset, test_size=0.2, random_state=880, show_eval_results = Fal
     return  df_train, policy_clf
 
 
-def accept_reject_split(X,y, policy_clf = None, threshold = 0.4):
+def accept_reject_split(X,y, policy_clf, threshold = 0.4):
     rej_prob = policy_clf.predict_proba(X)[:,1]
 
     X_accepts = X[rej_prob < threshold][cols_RI]
@@ -205,3 +207,113 @@ def calculate_approval_rate(C1, X_val, y_val, X_test):
     n_approved = (y_pred == 0).sum()
 
     return n_approved/X_test.shape[0]
+
+def get_metrics_RI(name_model_dict, X, y, X_v = False, y_v = False,
+                   X_unl = False, threshold_type = 'default', acp_rate = 0.15):
+    def get_best_threshold_with_ks(model, X, y):
+        y_probs = model.predict_proba(X)[:,1]
+        fpr, tpr, thresholds = roc_curve(y, y_probs)
+        return thresholds[np.argmax(tpr - fpr)]
+
+    models_dict = {}
+    for name, model in name_model_dict.items():
+        if type(model) == list:
+            y_prob = model[0].predict_proba(X)[:,1]
+            threshold_model = model[1]
+            y_pred = (y_prob >= threshold_model).astype('int')
+        else:
+            if threshold_type == 'default':
+                threshold = 0.5
+            elif threshold_type == 'ks':
+                if np.any(X_v):
+                    threshold = get_best_threshold_with_ks(model, X_v, y_v)
+                else:
+                    threshold = get_best_threshold_with_ks(model, X, y)
+            elif threshold_type == 'risk':
+                if np.any(X_v):
+                    threshold = risk_score_threshold(model, X_v, y_v)
+                else:
+                    threshold = risk_score_threshold(model, X, y)
+
+            y_prob = model.predict_proba(X)[:,1]
+            y_pred = (y_prob >= threshold).astype('int')
+
+        models_dict[name] = (y_pred, y_prob)
+
+    def evaluate_ks(y_real, y_proba):
+        ks = ks_2samp(y_proba[y_real == 0], y_proba[y_real == 1])
+        return ks.statistic
+
+    def get_metrics_df(models_dict, y_true,):
+        metrics_dict = {
+            "Overall AUC": (
+                lambda x: roc_auc_score(y_true, x), False),
+            "KS": (
+                lambda x: evaluate_ks(y_true, x), False),
+            "------": (lambda x: "", True),
+            "Balanced Accuracy": (
+                lambda x: balanced_accuracy_score(y_true, x), True),
+            "Accuracy": (
+                lambda x: accuracy_score(y_true, x), True),
+            "Precision": (
+                lambda x: precision_score(y_true, x), True),
+            "Recall": (
+                lambda x: recall_score(y_true, x), True),
+            "F1": (
+                lambda x: f1_score(y_true, x), True),
+            "-----": (lambda x: "", True),
+        }
+        df_dict = {}
+        for metric_name, (metric_func, use_preds) in metrics_dict.items():
+            df_dict[metric_name] = [metric_func(preds) if use_preds else metric_func(scores)
+                                    for model_name, (preds, scores) in models_dict.items()]
+        return df_dict
+
+    df_dict = get_metrics_df(models_dict, y)
+    if np.any(X_v) == False:
+        if np.any(X_unl) == False or 'original' not in name_model_dict:
+            del df_dict["-----"]
+
+    if np.any(X_v):
+        df_dict['Approval Rate'] = []
+    if np.any(X_unl) and 'original' in name_model_dict:
+        df_dict['Kickout'] = []
+        df_dict['KG'] = []
+        df_dict['KB'] = []
+
+    for name, model in name_model_dict.items():
+        if name != 'original':
+            if type(model) == list:
+                if np.any(X_v):
+                    df_dict['Approval Rate'].append(calculate_approval_rate(model[0], X_v, y_v, X))
+                if np.any(X_unl) and 'original' in name_model_dict:
+                    kickout, kg, kb = calculate_kickout_metric(name_model_dict['original'][0], model[0], X, y, X_unl, acp_rate)
+                    df_dict['Kickout'].append(kickout*10)
+                    df_dict['KG'].append(kg)
+                    df_dict['KB'].append(kb)
+            else:
+                if np.any(X_v):
+                    df_dict['Approval Rate'].append(calculate_approval_rate(model, X_v, y_v, X))
+                if np.any(X_unl) and 'original' in name_model_dict:
+                    try:
+                        original = name_model_dict['original'][0]
+                        kickout, kg, kb = calculate_kickout_metric(original, model, X, y, X_unl, acp_rate)
+                    except:
+                        original = name_model_dict['original']
+                        kickout, kg, kb = calculate_kickout_metric(original, model, X, y, X_unl, acp_rate)
+                    df_dict['Kickout'].append(kickout*10)
+                    df_dict['KG'].append(kg)
+                    df_dict['KB'].append(kb)
+        else:
+            if np.any(X_v):
+                if type(model) == list:
+                    df_dict['Approval Rate'].append(calculate_approval_rate(model[0], X_v, y_v, X))
+                else:
+                    df_dict['Approval Rate'].append(calculate_approval_rate(model, X_v, y_v, X))
+            if np.any(X_unl) and 'original' in name_model_dict:
+                df_dict['Kickout'].append(0)
+                df_dict['KG'].append(0)
+                df_dict['KB'].append(0)
+
+    metrics_df = pd.DataFrame.from_dict(df_dict, orient="index", columns=models_dict.keys())
+    return metrics_df
