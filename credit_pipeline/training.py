@@ -19,38 +19,43 @@ import optuna
 
 hyperparam_spaces = {
     "LogisticRegression": {
-        "C": {"low": 0.001, "high": 10, "log": True, "type": "float"},
+        "C": {"low": 1e-3, "high": 1e3, "log": True, "type": "float"},
+        "tol": {"low": 1e-6, "high": 1e-3, "log": True, "type": "float"},
+        "class_weight": {"choices": [None, "balanced"], "type": "categorical"},
         "max_iter": {"low": 1000, "high": 1000, "step": 1, "type": "int"},
         "penalty": {"choices": ["l1", "l2"], "type": "categorical"},
-        "class_weight": {"choices": [None, "balanced"], "type": "categorical"},
         "solver": {"choices": ["liblinear"], "type": "categorical"},
     },
     "RandomForestClassifier": {
-        "n_estimators": {"low": 10, "high": 150, "step": 20, "type": "int"},
-        "max_depth": {"low": 2, "high": 10, "type": "int"},
+        "n_estimators": {"low": 5, "high": 250, "type": "int"},
+        "max_depth": {"low": 2, "high": 12, "type": "int"},
         "criterion": {"choices": ["gini", "entropy"], "type": "categorical"},
-        "min_samples_leaf": {"low": 1, "high": 51, "step": 5, "type": "int"},
+        "min_samples_split": {"low": 1, "high": 256, "type": "int"},
+        "min_samples_leaf": {"low": 1, "high": 256, "type": "int"},
         "max_features": {"low": 0.1, "high": 1.0, "type": "float"},
         "class_weight": {"choices": [None, "balanced"], "type": "categorical"},
     },
     "LGBMClassifier": {
-        "learning_rate": {"low": 0.01, "high": 1.0, "type": "float", "log": True},
-        "num_leaves": {"low": 5, "high": 100, "step": 5, "type": "int"},
-        "max_depth": {"low": 2, "high": 10, "type": "int"},
-        "min_child_samples": {"low": 1, "high": 51, "step": 5, "type": "int"},
+        "n_estimators": {"low": 5, "high": 250, "type": "int"},
+        "learning_rate": {"low": 0.05, "high": 1.0, "type": "float"},
+        "num_leaves": {"low": 4, "high": 256, "type": "int"},
+        "max_depth": {"low": 2, "high": 12, "type": "int"},
+        "min_child_samples": {"low": 1, "high": 256, "type": "int"},
         "colsample_bytree": {"low": 0.1, "high": 1.0, "type": "float"},
-        "reg_alpha": {"low": 0.0, "high": 1.0, "type": "float"},
-        "reg_lambda": {"low": 0.0, "high": 1.0, "type": "float"},
-        "n_estimators": {"low": 5, "high": 100, "step": 5, "type": "int"},
+        "reg_alpha": {"low": 1e-3, "high": 1e3, "log": True, "type": "float"},
+        "reg_lambda": {"low": 1e-3, "high": 1e3, "log": True, "type": "float"},
         "class_weight": {"choices": [None, "balanced"], "type": "categorical"},
         "verbose": {"choices": [-1], "type": "categorical"},
     },
     "MLPClassifier": {
         "hidden_layer_sizes": {
             "choices": [
-                [128, 64, 32],
-                [128, 64, 32, 16],
-                [256, 128, 64, 32, 16],
+                [32],
+                [64],
+                [128],
+                [32, 16],
+                [64, 32],
+                [64, 32, 16],
             ],
             "type": "categorical",
         },
@@ -60,13 +65,11 @@ hyperparam_spaces = {
             "high": 1,
             "type": "float",
         },
-        "alpha": {"low": 0.0001, "high": 0.01, "type": "float", "log": True},
-        "epochs" : {"low": 10, "high": 100, "type": "int", "step": 10},
+        "alpha": {"low": 1e-3, "high": 1e3, "type": "float", "log": True},
+        "epochs": {"low": 10, "high": 100, "type": "int", "step": 10},
         "class_weight": {"choices": [None, "balanced"], "type": "categorical"},
     },
 }
-
-
 
 
 class EBE(
@@ -172,7 +175,6 @@ def create_pipeline(
         num_cols = X.columns.difference(cat_cols).tolist()
         ebe_cols = [col for col in cat_cols if X[col].nunique() >= crit if do_EBE]
         cat_cols = [item for item in cat_cols if item not in ebe_cols]
-
 
     # check if need EBE
     if do_EBE:
@@ -382,8 +384,8 @@ def optimize_model(
     y_val=None,
     cv=5,
     pipeline_params={},
-    fit_params = {},
-    score_func = "roc_auc",
+    fit_params={},
+    score_func="roc_auc",
     n_trials=None,
     timeout=None,
     seed_number=0,
@@ -406,7 +408,7 @@ def optimize_model(
     X_val: pandas.DataFrame or numpy.ndarray, default=None
         Validation data features.
     y_val: array-like, default=None
-        Validation data target. 
+        Validation data target.
     cv: int, optional, default=5
         Number of folds for cross-validation
     pipeline_params: dict, optional, default={}
@@ -421,7 +423,7 @@ def optimize_model(
         Number of seconds
     seed_number: int, default=0
         Random seed number.
-    
+
     Returns
     -------
     (optuna.study.Study, sklearn.pipeline.Pipeline) - study and model
@@ -473,25 +475,28 @@ def ks_threshold(y_true, y_score):
     opt_threshold = thresholds[np.argmax(tpr - fpr)]
     return opt_threshold
 
-def create_train_test(dataset, final = False, seed = 880, dev_test_size = 0.2):
-    """ Splits a dataset betweeen a train set and development or deployment test.
-    
+
+def create_train_test(dataset, final=False, seed=880, dev_test_size=0.2):
+    """Splits a dataset betweeen a train set and development or deployment test.
+
     Parameters:
     - dataset (DataFrame or array-like): The dataset to be split into train and test sets.
     - final (bool): If True, indicates that the holdout test will be.
                     If False, indicates that the development test will be returned (default: False).
     - seed (int): Seed value for random state for development test (default: 880).
-    - dev_test_size (float): The proportion of the dataset to include in the development 
+    - dev_test_size (float): The proportion of the dataset to include in the development
     test split (default: 0.2).
 
     Returns:
     - Tuple: (train_set, test_set) - The training and testing datasets.
-    
+
     """
-    #Do not change the following parameters neither the value of final to avoid data leakage
+    # Do not change the following parameters neither the value of final to avoid data leakage
     train, holdout = train_test_split(dataset, test_size=0.2, random_state=880)
     if final:
         return train, holdout
     else:
-        dev_train, dev_test = train_test_split(train, test_size=dev_test_size, random_state=seed)
+        dev_train, dev_test = train_test_split(
+            train, test_size=dev_test_size, random_state=seed
+        )
         return dev_train, dev_test
