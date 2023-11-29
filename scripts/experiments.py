@@ -34,16 +34,22 @@ PROTECTED_ATTRIBUTES = {
 }
 
 FAIRNESS_PARAM_SPACES = {}
-FAIRNESS_PARAM_SPACES["FairGBMClassifier"] = training.hyperparam_spaces["LGBMClassifier"].copy()
+FAIRNESS_PARAM_SPACES["FairGBMClassifier"] = training.hyperparam_spaces[
+    "LGBMClassifier"
+].copy()
 FAIRNESS_PARAM_SPACES["FairGBMClassifier"]["multiplier_learning_rate"] = {
-    "low": 0.01, "high" : 1, "type": "float",
+    "low": 0.01,
+    "high": 1,
+    "type": "float",
 }
 FAIRNESS_PARAM_SPACES["EqualOpportunityClassifier"] = {
-    "covariance_threshold" : {"low": 0, "high": 1, "type": "float"},
-    "max_iter" : {"choices" : [1000], "type" : "categorical"},
-    "C" : {"low": 0.01, "high": 100, "type": "float"},
+    "covariance_threshold": {"low": 0, "high": 1, "type": "float"},
+    "max_iter": {"choices": [1000], "type": "categorical"},
+    "C": {"low": 0.01, "high": 100, "type": "float"},
 }
-FAIRNESS_PARAM_SPACES["DemographicParityClassifier"] = FAIRNESS_PARAM_SPACES["EqualOpportunityClassifier"].copy()
+FAIRNESS_PARAM_SPACES["DemographicParityClassifier"] = FAIRNESS_PARAM_SPACES[
+    "EqualOpportunityClassifier"
+].copy()
 
 
 def load_split(dataset_name, fold, seed=0):
@@ -161,19 +167,19 @@ def experiment_fairness(args):
         pipeline_preprocess = training.create_pipeline(X_train, Y_train)
         pipeline_preprocess.fit(X_train, Y_train)
         X_train_preprocessed = pipeline_preprocess.transform(X_train)
-        A_train = X_train_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]]+"_0"]
+        A_train = X_train_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
         X_test_preprocessed = pipeline_preprocess.transform(X_test)
-        A_test = X_test_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]]+"_0"]
+        A_test = X_test_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
         df_rw = pd.DataFrame(X_train_preprocessed)
         df_rw["DEFAULT"] = Y_train
         X_train_aif = BinaryLabelDataset(
             df=df_rw,
             label_names=["DEFAULT"],
-            protected_attribute_names=[PROTECTED_ATTRIBUTES[args["dataset"]]+"_0"],
+            protected_attribute_names=[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"],
         )
         rw = Reweighing(
-            unprivileged_groups=[{PROTECTED_ATTRIBUTES[args["dataset"]]+"_0": 0}],
-            privileged_groups=[{PROTECTED_ATTRIBUTES[args["dataset"]]+"_0": 1}],
+            unprivileged_groups=[{PROTECTED_ATTRIBUTES[args["dataset"]] + "_0": 0}],
+            privileged_groups=[{PROTECTED_ATTRIBUTES[args["dataset"]] + "_0": 1}],
         )
         rw.fit(X_train_aif)
         rw_weights = rw.transform(X_train_aif).instance_weights
@@ -195,7 +201,9 @@ def experiment_fairness(args):
             threshold = training.ks_threshold(Y_train, Y_pred)
             model_dict = {"rw_" + model_class.__name__: [model, threshold]}
             metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
-            fairness_metrics = evaluate.get_fairness_metrics(model_dict, X_test, Y_test, A_test)
+            fairness_metrics = evaluate.get_fairness_metrics(
+                model_dict, X_test, Y_test, A_test
+            )
 
             joblib.dump(model, f"{path}/{fold}/rw_{model_class.__name__}.pkl")
             joblib.dump(
@@ -217,7 +225,7 @@ def experiment_fairness(args):
             print("Model: ", model_class.__name__)
             param_space = FAIRNESS_PARAM_SPACES[model_class.__name__]
             param_space["sensitive_cols"] = {
-                "choices": [PROTECTED_ATTRIBUTES[args["dataset"]]+"_0"],
+                "choices": [PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"],
                 "type": "categorical",
             }
             param_space["positive_target"] = {
@@ -239,7 +247,9 @@ def experiment_fairness(args):
             threshold = training.ks_threshold(Y_train, Y_pred)
             model_dict = {model_class.__name__: [model, threshold]}
             metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
-            fairness_metrics = evaluate.get_fairness_metrics(model_dict, X_test, Y_test, A_test)
+            fairness_metrics = evaluate.get_fairness_metrics(
+                model_dict, X_test, Y_test, A_test
+            )
 
             joblib.dump(model, f"{path}/{fold}/{model_class.__name__}.pkl")
             joblib.dump(
@@ -256,7 +266,7 @@ def experiment_fairness(args):
             )
 
             print(f"Finished training with ROC {study.best_value:.2f}")
-        
+
         model_class = FairGBMClassifier
         print("Model: ", model_class.__name__)
         study, model = training.optimize_model(
@@ -267,7 +277,7 @@ def experiment_fairness(args):
             X_val,
             Y_val,
             cv=None,
-            fit_params = {"classifier__constraint_group" : A_train},
+            fit_params={"classifier__constraint_group": A_train},
             n_trials=args["n_trials"],
             timeout=args["timeout"],
         )
@@ -275,7 +285,9 @@ def experiment_fairness(args):
         threshold = training.ks_threshold(Y_train, Y_pred)
         model_dict = {model_class.__name__: [model, threshold]}
         metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
-        fairness_metrics = evaluate.get_fairness_metrics(model_dict, X_test, Y_test, A_test) 
+        fairness_metrics = evaluate.get_fairness_metrics(
+            model_dict, X_test, Y_test, A_test
+        )
 
         joblib.dump(model, f"{path}/{fold}/{model_class.__name__}.pkl")
         joblib.dump(
@@ -296,7 +308,7 @@ def experiment_fairness(args):
         for model_class in MODEL_CLASS_LIST:
             path_ = path
             path_ = path_.replace("fair_models", "credit_models")
-            model = joblib.load(f"{path_}/{fold}/{model_class.__name__}.pkl") 
+            model = joblib.load(f"{path_}/{fold}/{model_class.__name__}.pkl")
             thr_opt = ThresholdOptimizer(
                 estimator=model,
                 constraints="equalized_odds",
@@ -309,7 +321,9 @@ def experiment_fairness(args):
             threshold = training.ks_threshold(Y_train, Y_pred)
             model_dict = {"thr_" + model_class.__name__: [model, threshold]}
             metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
-            fairness_metrics = evaluate.get_fairness_metrics(model_dict, X_test, Y_test, A_test)
+            fairness_metrics = evaluate.get_fairness_metrics(
+                model_dict, X_test, Y_test, A_test
+            )
 
             joblib.dump(model, f"{path}/{fold}/thr_{model_class.__name__}.pkl")
             joblib.dump(
@@ -324,8 +338,6 @@ def experiment_fairness(args):
                 f"{path}/{fold}/thr_{model_class.__name__}_fairness_metrics.csv",
                 index=False,
             )
-
-
 
 
 if __name__ == "__main__":
@@ -350,7 +362,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--n_trials",
         type=int,
-        default=None,
+        default=100,
         help="number of trials for the hyperparameter optimization",
     )
     parser.add_argument(
