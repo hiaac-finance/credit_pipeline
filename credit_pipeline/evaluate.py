@@ -213,7 +213,7 @@ def create_eod_scorer(z, benefit_class=1):
     
     return eod_scorer
 
-def create_fairness_scorer(fairness_goal, z, benefit_class=1):
+def create_fairness_scorer(fairness_goal, z, M = 10, benefit_class=1):
     """Create a scorer for fairness metrics. The scorer can be used in hyperparameter tuning.
     
     It will return the value of the roc auc if the fairness goal is reached, otherwise it will return a low value.
@@ -224,10 +224,11 @@ def create_fairness_scorer(fairness_goal, z, benefit_class=1):
         Value of the fairness metric to be reached. The lower the value, the more fair the model.
     z : array-like
         Sensitive attribute to be used in the scorer, it must be in the same order as the data used to generate the prediction.
+    M : int, optional
+        Penalty for not reaching the fairness goal, by default 10
     benefit_class : int, optional
         Label of positive class to calculate metric, by default 1
     """
-    M = 100
     def fairness_scorer(y_true, y_pred):
         y_true_ = (y_true == benefit_class).astype("float")
         y_pred_ = (y_pred == benefit_class).astype("float")
