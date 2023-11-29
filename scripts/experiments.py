@@ -102,6 +102,15 @@ def experiment_credit_models(args):
         X_train, Y_train, X_val, Y_val, X_test, Y_test = load_split(
             args["dataset"], fold, args["seed"]
         )
+        # Workaround to obtain the protected attribute as a binary column
+        pipeline_preprocess = training.create_pipeline(X_train, Y_train)
+        pipeline_preprocess.fit(X_train, Y_train)
+        X_train_preprocessed = pipeline_preprocess.transform(X_train)
+        A_train = X_train_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
+        X_test_preprocessed = pipeline_preprocess.transform(X_test)
+        A_test = X_test_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
+        del X_train_preprocessed, X_test_preprocessed, pipeline_preprocess
+        
         for model_class in MODEL_CLASS_LIST:
             print("Model: ", model_class.__name__)
             study, model = training.optimize_model(
@@ -119,6 +128,9 @@ def experiment_credit_models(args):
             threshold = training.ks_threshold(Y_train, Y_pred)
             model_dict = {model_class.__name__: [model, threshold]}
             metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
+            fairness_metrics = evaluate.get_fairness_metrics(
+                model_dict, X_test, Y_test, A_test
+            )
 
             # save results
             print(f"Finished training with ROC {study.best_value:.2f}")
@@ -131,6 +143,10 @@ def experiment_credit_models(args):
                 f"{path}/{fold}/{model_class.__name__}_metrics.csv",
                 index=False,
             )
+            fairness_metrics.to_csv(
+                f"{path}/{fold}/{model_class.__name__}_fairness_metrics.csv",
+                index=False,
+            )
 
     metrics = [
         pd.read_csv(f"{path}/{fold}/{model_class.__name__}_metrics.csv")
@@ -140,9 +156,21 @@ def experiment_credit_models(args):
     metrics = pd.concat(metrics)
     metrics_mean = metrics.groupby("model").mean()
     metrics_std = metrics.groupby("model").std()
-    # join mean and std
     metrics = metrics_mean.join(metrics_std, lsuffix="_mean", rsuffix="_std")
-    metrics.groupby("model").mean().to_csv(f"{path}/metrics.csv")
+    metrics.to_csv(f"{path}/metrics.csv")
+
+    fairness_metrics = [
+        pd.read_csv(f"{path}/{fold}/{model_class.__name__}_fairness_metrics.csv")
+        for fold in range(10)
+        for model_class in MODEL_CLASS_LIST
+    ]
+    fairness_metrics = pd.concat(fairness_metrics)
+    fairness_metrics_mean = fairness_metrics.groupby("model").mean()
+    fairness_metrics_std = fairness_metrics.groupby("model").std()
+    fairness_metrics = fairness_metrics_mean.join(
+        fairness_metrics_std, lsuffix="_mean", rsuffix="_std"
+    )
+    fairness_metrics.to_csv(f"{path}/fairness_metrics.csv")
 
 
 def experiment_fairness(args):
