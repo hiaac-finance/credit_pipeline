@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+import keras
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.regularizers import l2
@@ -44,10 +45,8 @@ class MLPClassifier(BaseEstimator, ClassifierMixin):
         class_weight=None,
         random_state=None,
     ):
-        if random_state is not None:
-            np.random.seed(random_state)
-            tf.random.set_seed(random_state)
-        self.random_state = random_state
+        self._random_state = random_state
+        self._seed_everything(random_state)
         self.hidden_layer_sizes = hidden_layer_sizes
         self.batch_size = batch_size
         self.learning_rate_init = learning_rate_init
@@ -55,6 +54,22 @@ class MLPClassifier(BaseEstimator, ClassifierMixin):
         self.alpha = alpha
         self.epochs = epochs
         self.class_weight = class_weight
+
+    @property
+    def random_state(self):
+        return self._random_state
+
+    @random_state.setter
+    def random_state(self, value):
+        self._random_state = value
+        self._seed_everything(value)
+
+    def _seed_everything(self, value):
+        if value is not None:
+            np.random.seed(self.random_state)
+            tf.random.set_seed(self.random_state)
+            keras.utils.set_random_seed(self.random_state)
+            tf.config.experimental.enable_op_determinism()
 
     def set_model(self, X):
         model = Sequential()
@@ -107,7 +122,7 @@ class MLPClassifier(BaseEstimator, ClassifierMixin):
         return np.concatenate([1 - prob, prob], axis=1)
 
     def predict(self, X):
-        return self.model.predict(X, verbose = 0) > 0.5
+        return self.model.predict(X, verbose=0) > 0.5
 
     def score(self, X, y):
         return self.model.evaluate(X, y, verbose=0)[1]
