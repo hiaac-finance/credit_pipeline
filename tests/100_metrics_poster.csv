@@ -1,0 +1,3 @@
+,original,aug_SC,aug_up,aug_down,fuzzy,extrap-confident,labelSpr,last
+Overall AUC,0.733,0.715,0.725,0.728,0.724,0.738,0.732,0.706
+Kickout,0.0,0.304,0.149,0.201,0.359,0.326,0.344,0.278

@@ -1,6 +1,8 @@
+from lightgbm import LGBMClassifier
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.ensemble import IsolationForest
 
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
@@ -8,6 +10,7 @@ from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
                             f1_score, precision_score, recall_score,
                             roc_auc_score, roc_curve)
 from scipy.stats import ks_2samp
+from sklearn.semi_supervised import LabelSpreading
 
 import credit_pipeline.training as tr
 
@@ -317,3 +320,6 @@ def get_metrics_RI(name_model_dict, X, y, X_v = False, y_v = False,
 
     metrics_df = pd.DataFrame.from_dict(df_dict, orient="index", columns=models_dict.keys())
     return metrics_df
+
+
+
