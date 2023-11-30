@@ -211,6 +211,8 @@ def calculate_approval_rate(C1, X_val, y_val, X_test):
 
     return n_approved/X_test.shape[0]
 
+dkl = 0
+
 def get_metrics_RI(name_model_dict, X, y, X_v = False, y_v = False,
                    X_unl = False, threshold_type = 'default', acp_rate = 0.15):
     def get_best_threshold_with_ks(model, X, y):
