@@ -290,7 +290,7 @@ def objective(
     X_val,
     y_val,
     cv,
-    seed_number=0,
+    seed_number,
 ):
     """Objective function for optimizing machine learning models using Optuna. This function serves as the objective for an Optuna study, aiming to find the best hyperparameters
     for a machine learning model from a given parameter space. It initializes the model with hyperparameters
@@ -320,8 +320,8 @@ def objective(
         Validation data target.
     cv : int
         Number of folds for cross-validation if validation set is not provided.
-    seed_number : int, optional
-        Random seed, by default 0
+    seed_number : int or None
+        Random seed.
 
     Returns
     -------
@@ -388,7 +388,7 @@ def optimize_model(
     score_func="roc_auc",
     n_trials=None,
     timeout=None,
-    seed_number=0,
+    seed_number=None,
 ):
     """Optimize hyperparameters of a machine learning model using Optuna.
     This function creates an Optuna study to search for the best hyperparameters for a given machine learning model from a specified parameter space. The objective of the study is to maximize the ROC score of the model on the validation score. It can work with a provided validation set or with cross-validation.
@@ -421,7 +421,7 @@ def optimize_model(
         Number of trials.
     timeout: int, optional, default=None
         Number of seconds
-    seed_number: int, default=0
+    seed_number: int, default=None
         Random seed number.
 
     Returns

@@ -123,6 +123,7 @@ def experiment_credit_models(args):
                 cv=None,
                 n_trials=args["n_trials"],
                 timeout=args["timeout"],
+                seed_number = args["seed"]
             )
             Y_pred = model.predict_proba(X_train)[:, 1]
             threshold = training.ks_threshold(Y_train, Y_pred)
