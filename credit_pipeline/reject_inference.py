@@ -299,11 +299,11 @@ def get_metrics_RI(name_model_dict, X, y, X_v = False, y_v = False,
                     df_dict['Approval Rate'].append(calculate_approval_rate(model, X_v, y_v, X))
                 if np.any(X_unl) and 'original' in name_model_dict:
                     try:
-                        original = name_model_dict['original'][0]
-                        kickout, kg, kb = calculate_kickout_metric(original, model, X, y, X_unl, acp_rate)
-                    except:
-                        original = name_model_dict['original']
-                        kickout, kg, kb = calculate_kickout_metric(original, model, X, y, X_unl, acp_rate)
+                        original = name_model_dict["original"][0]  # Assuming "original" is a list
+                    except TypeError:  # Raised when name_model_dict["original"] is not subscriptable (not a list or similar)
+                        original = name_model_dict["original"]
+
+                    kickout, kg, kb = calculate_kickout_metric(original, model, X, y, X_unl, acp_rate)
                     df_dict['Kickout'].append(kickout*10)
                     df_dict['KG'].append(kg)
                     df_dict['KB'].append(kb)
@@ -320,6 +320,3 @@ def get_metrics_RI(name_model_dict, X, y, X_v = False, y_v = False,
 
     metrics_df = pd.DataFrame.from_dict(df_dict, orient="index", columns=models_dict.keys())
     return metrics_df
-
-
-
