@@ -213,7 +213,7 @@ def calculate_approval_rate(C1, X_val, y_val, X_test):
     return n_approved/X_test.shape[0]
 
 def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
-                   X_unl = None, threshold_type = 'default', acp_rate = 0.15):
+                   X_unl = None, threshold_type = 'ks', acp_rate = 0.15):
     def get_best_threshold_with_ks(model, X, y):
         y_probs = model.predict_proba(X)[:,1]
         fpr, tpr, thresholds = roc_curve(y, y_probs)
@@ -291,7 +291,8 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
                 if np.any(X_v):
                     df_dict['Approval Rate'].append(calculate_approval_rate(model[0], X_v, y_v, X))
                 if np.any(X_unl) and 'original' in name_model_dict:
-                    kickout, kg, kb = calculate_kickout_metric(name_model_dict['original'][0], model[0], X, y, X_unl, acp_rate)
+                    kickout, kg, kb = calculate_kickout_metric(
+                        name_model_dict['original'][0], model[0], X, y, X_unl, acp_rate)
                     df_dict['Kickout'].append(kickout*10)
                     df_dict['KG'].append(kg)
                     df_dict['KB'].append(kb)
@@ -327,6 +328,7 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
 def trusted_non_outliers(contamination_threshold, size,
                                 X_train, y_train, X_unl, seed = seed_number):
     # get_shapes([X_train, y_train, X_unl, y_unl, X_test, y_test])
+    params_dict['LightGBM_2'].update({'random_state': seed})
 
     if X_unl.shape[0] < 1:
         return X_train, y_train, X_unl
@@ -408,7 +410,11 @@ def trusted_non_outliers(contamination_threshold, size,
     return X_train_updated, y_train_updated, X_kept
 
 
-def augmentation_with_soft_cutoff(X_train, y_train, X_unl):
+
+
+#---------Other Strategies----------
+
+def augmentation_with_soft_cutoff(X_train, y_train, X_unl, seed = seed_number):
     """[Augmentation with Soft Cutoff] (Siddiqi, 2012)
 
     Parameters
@@ -420,6 +426,8 @@ def augmentation_with_soft_cutoff(X_train, y_train, X_unl):
     X_unl : _type_
         _description_
     """
+    params_dict['LightGBM_2'].update({'random_state': seed})
+
     #--------------Get Data----------------
     #Create dataset based on Approved(1)/Decline(0) condition
     X_aug_train = pd.concat([X_train, X_unl])
@@ -461,9 +469,9 @@ def augmentation_with_soft_cutoff(X_train, y_train, X_unl):
     augmentation_classifier_SC = tr.create_pipeline(X_train, y_train, LGBMClassifier(**params_dict['LightGBM_2']))
     augmentation_classifier_SC.fit(X_train, y_train, classifier__sample_weight = weights_SC)
 
-    return ('aug_SC', augmentation_classifier_SC)
+    return {'aug_SC': augmentation_classifier_SC}
 
-def augmentation(X_train, y_train, X_unl, mode = 'up'):
+def augmentation(X_train, y_train, X_unl, mode = 'up', seed = seed_number):
     """[Augmentation,Reweighting] (Anderson, 2022), (Siddiqi, 2012)
 
     Parameters
@@ -477,6 +485,7 @@ def augmentation(X_train, y_train, X_unl, mode = 'up'):
     mode : str, optional
         _description_, by default 'up'
     """
+    params_dict['LightGBM_2'].update({'random_state': seed})
     #--------------Get Data----------------
     #Create dataset based on Approved(1)/Decline(0) condition
     X_aug_train = pd.concat([X_train, X_unl])
@@ -505,15 +514,15 @@ def augmentation(X_train, y_train, X_unl, mode = 'up'):
         augmentation_classifier_up = tr.create_pipeline(X_train, y_train, LGBMClassifier(**params_dict['LightGBM_2']))
         augmentation_classifier_up.fit(X_train, y_train, classifier__sample_weight = acp_weights_up)
 
-        return 'aug_up', augmentation_classifier_up
+        return {'aug_up': augmentation_classifier_up}
     elif mode == 'down':
         augmentation_classifier_down = tr.create_pipeline(X_train, y_train, LGBMClassifier(**params_dict['LightGBM_2']))
         augmentation_classifier_down.fit(X_train, y_train, classifier__sample_weight = acp_weights_down)
 
-        return 'aug_down', augmentation_classifier_down
+        return {'aug_down': augmentation_classifier_down}
 
 
-def fuzzy_augmentation(X_train, y_train, X_unl):
+def fuzzy_augmentation(X_train, y_train, X_unl, seed = seed_number):
     """[Fuzzy-Parcelling](Anderson, 2022)
 
     Parameters
@@ -525,6 +534,8 @@ def fuzzy_augmentation(X_train, y_train, X_unl):
     X_unl : _type_
         _description_
     """
+    params_dict['LightGBM_2'].update({'random_state': seed})
+
     #--------------Get Dataset----------------
     X_fuzzy_train = pd.concat([X_train, X_unl, X_unl])
     X_fuzzy_train.index = range(X_fuzzy_train.shape[0])
@@ -549,10 +560,10 @@ def fuzzy_augmentation(X_train, y_train, X_unl):
     fuzzy_classifier = tr.create_pipeline(X_fuzzy_train, y_fuzzy_train, LGBMClassifier(**params_dict['LightGBM_2']))
     fuzzy_classifier.fit(X_fuzzy_train, y_fuzzy_train, classifier__sample_weight = fuzzy_weights)
 
-    return 'fuzzy', fuzzy_classifier
+    return {'fuzzy': fuzzy_classifier}
 
 
-def extrapolation(X_train, y_train, X_unl, mode = "bad"):
+def extrapolation(X_train, y_train, X_unl, mode = "bad", seed = seed_number):
     """[extrapolation, hard cutoff, Simple Augmentation] (Siddiqi, 2012)
 
     Parameters
@@ -566,6 +577,8 @@ def extrapolation(X_train, y_train, X_unl, mode = "bad"):
     mode : str, optional
         _description_, by default "bad"
     """
+
+    params_dict['LightGBM_2'].update({'random_state': seed})
     #--------------Fit classifier----------------
     #Fit classifier on Accepts Performance
     default_classifier = tr.create_pipeline(X_train, y_train, LGBMClassifier(**params_dict['LightGBM_2']))
@@ -594,7 +607,7 @@ def extrapolation(X_train, y_train, X_unl, mode = "bad"):
     return {'ext': extrap_classifier}
 
 
-def parcelling(X_train, y_train, X_unl, n_scores_interv = 100, prejudice = 3):
+def parcelling(X_train, y_train, X_unl, n_scores_interv = 100, prejudice = 3, seed = seed_number):
     """[Parcelling] (Siddiqi, 2012)
 
     Parameters
@@ -610,6 +623,8 @@ def parcelling(X_train, y_train, X_unl, n_scores_interv = 100, prejudice = 3):
     prejudice : int, optional
         _description_, by default 3
     """
+    params_dict['LightGBM_2'].update({'random_state': seed})
+
     #--------------Create new Dataset----------------
     #Create dataset with Approved and Rejected
     X_aug_train = pd.concat([X_train, X_unl])
@@ -650,7 +665,7 @@ def parcelling(X_train, y_train, X_unl, n_scores_interv = 100, prejudice = 3):
             #expected number of good in rejects
             good_rate_in_R = int(good_rate*len(rejects))
             #randomize rejects
-            random_rejects = np.random.permutation(rejects)
+            random_rejects = np.random.default_rng(seed=seed).permutation(rejects)
             #select good_rate_in_R as good
             as_good = random_rejects[:good_rate_in_R]
             y_aug_train.loc[as_good] = 0
@@ -662,10 +677,10 @@ def parcelling(X_train, y_train, X_unl, n_scores_interv = 100, prejudice = 3):
     parcelling_classifier = tr.create_pipeline(X_aug_train, y_aug_train, LGBMClassifier(**params_dict['LightGBM_2']))
     parcelling_classifier.fit(X_aug_train, y_aug_train)
 
-    return 'parcelling', parcelling_classifier
+    return {'parcelling': parcelling_classifier}
 
 
-def label_spreading(X_train, y_train, X_unl):
+def label_spreading(X_train, y_train, X_unl, seed = seed_number):
     """[Label Spreading] (Zhou, 2004)(Kang, 2021)
 
     Parameters
@@ -677,6 +692,8 @@ def label_spreading(X_train, y_train, X_unl):
     X_unl : _type_
         _description_
     """
+
+    params_dict['LightGBM_2'].update({'random_state': seed})
     #--------------Create dataset with Approved and Rejected---------------
     X_train_ls, y_train_ls, X_unl_ls = X_train.copy(), y_train.copy(), X_unl.copy()
 
@@ -704,6 +721,4 @@ def label_spreading(X_train, y_train, X_unl):
     clf_LS = tr.create_pipeline(new_X_train, new_y_train, LGBMClassifier(**params_dict['LightGBM_2']))
     clf_LS.fit(new_X_train, new_y_train,)
 
-    return 'labelSpr', clf_LS
-
-
+    return {'labelSpr': clf_LS}
