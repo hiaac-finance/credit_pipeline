@@ -2,6 +2,7 @@ from lightgbm import LGBMClassifier
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from types import NoneType
 from sklearn.ensemble import IsolationForest
 
 from sklearn.model_selection import train_test_split
@@ -211,8 +212,8 @@ def calculate_approval_rate(C1, X_val, y_val, X_test):
 
     return n_approved/X_test.shape[0]
 
-def get_metrics_RI(name_model_dict, X, y, X_v = False, y_v = False,
-                   X_unl = False, threshold_type = 'default', acp_rate = 0.15):
+def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
+                   X_unl = None, threshold_type = 'default', acp_rate = 0.15):
     def get_best_threshold_with_ks(model, X, y):
         y_probs = model.predict_proba(X)[:,1]
         fpr, tpr, thresholds = roc_curve(y, y_probs)
@@ -220,7 +221,7 @@ def get_metrics_RI(name_model_dict, X, y, X_v = False, y_v = False,
 
     models_dict = {}
     for name, model in name_model_dict.items():
-        if type(model) == list:
+        if isinstance(model, list):
             y_prob = model[0].predict_proba(X)[:,1]
             threshold_model = model[1]
             y_pred = (y_prob >= threshold_model).astype('int')
@@ -273,8 +274,8 @@ def get_metrics_RI(name_model_dict, X, y, X_v = False, y_v = False,
         return df_dict
 
     df_dict = get_metrics_df(models_dict, y)
-    if np.any(X_v) == False:
-        if np.any(X_unl) == False or 'original' not in name_model_dict:
+    if isinstance(X_v, NoneType):
+        if isinstance(X_unl, NoneType) or ('original' not in name_model_dict):
             del df_dict["-----"]
 
     if np.any(X_v):
@@ -286,7 +287,7 @@ def get_metrics_RI(name_model_dict, X, y, X_v = False, y_v = False,
 
     for name, model in name_model_dict.items():
         if name != 'original':
-            if type(model) == list:
+            if isinstance(model, list):
                 if np.any(X_v):
                     df_dict['Approval Rate'].append(calculate_approval_rate(model[0], X_v, y_v, X))
                 if np.any(X_unl) and 'original' in name_model_dict:
@@ -298,9 +299,9 @@ def get_metrics_RI(name_model_dict, X, y, X_v = False, y_v = False,
                 if np.any(X_v):
                     df_dict['Approval Rate'].append(calculate_approval_rate(model, X_v, y_v, X))
                 if np.any(X_unl) and 'original' in name_model_dict:
-                    try:
+                    if isinstance(name_model_dict["original"], list):
                         original = name_model_dict["original"][0]  # Assuming "original" is a list
-                    except TypeError:  # Raised when name_model_dict["original"] is not subscriptable (not a list or similar)
+                    else:
                         original = name_model_dict["original"]
 
                     kickout, kg, kb = calculate_kickout_metric(original, model, X, y, X_unl, acp_rate)
@@ -309,7 +310,7 @@ def get_metrics_RI(name_model_dict, X, y, X_v = False, y_v = False,
                     df_dict['KB'].append(kb)
         else:
             if np.any(X_v):
-                if type(model) == list:
+                if isinstance(model,list):
                     df_dict['Approval Rate'].append(calculate_approval_rate(model[0], X_v, y_v, X))
                 else:
                     df_dict['Approval Rate'].append(calculate_approval_rate(model, X_v, y_v, X))
