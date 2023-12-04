@@ -325,8 +325,13 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
 
 
 #Iterative Pipeline With EBE
-def trusted_non_outliers(contamination_threshold, size,
-                                X_train, y_train, X_unl, seed = seed_number):
+def trusted_non_outliers(X_train, y_train, X_unl, 
+                        contamination_threshold = 0.1,
+                        size = 1000,
+                        clf_class = LGBMClassifier,
+                        clf_params = params_dict['LightGBM_2'],
+                        seed = 880,
+                        ):
     # get_shapes([X_train, y_train, X_unl, y_unl, X_test, y_test])
     params_dict['LightGBM_2'].update({'random_state': seed})
 
@@ -335,7 +340,7 @@ def trusted_non_outliers(contamination_threshold, size,
 
     iso_params = {"contamination":contamination_threshold, "random_state":seed}
 
-    rotulator = tr.create_pipeline(X_train, y_train, LGBMClassifier(**params_dict['LightGBM_2']),
+    rotulator = tr.create_pipeline(X_train, y_train, clf_class(**clf_params),
                                     onehot=True, normalize=True, do_EBE=True)
     rotulator.fit(X_train, y_train)
 
