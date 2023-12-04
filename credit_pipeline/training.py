@@ -30,7 +30,7 @@ hyperparam_spaces = {
         "n_estimators": {"low": 5, "high": 250, "type": "int"},
         "max_depth": {"low": 2, "high": 12, "type": "int"},
         "criterion": {"choices": ["gini", "entropy"], "type": "categorical"},
-        "min_samples_split": {"low": 1, "high": 256, "type": "int"},
+        "min_samples_split": {"low": 2, "high": 256, "type": "int"},
         "min_samples_leaf": {"low": 1, "high": 256, "type": "int"},
         "max_features": {"low": 0.1, "high": 1.0, "type": "float"},
         "class_weight": {"choices": [None, "balanced"], "type": "categorical"},
