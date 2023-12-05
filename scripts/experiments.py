@@ -6,14 +6,14 @@ from pathlib import Path
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from lightgbm import LGBMClassifier
-from aif360.datasets import BinaryLabelDataset
-from aif360.algorithms.preprocessing import Reweighing
-from fairgbm import FairGBMClassifier
-from sklego.linear_model import DemographicParityClassifier, EqualOpportunityClassifier
-from fairlearn.postprocessing import ThresholdOptimizer
+#from aif360.datasets import BinaryLabelDataset
+#from aif360.algorithms.preprocessing import Reweighing
+#from fairgbm import FairGBMClassifier
+#from sklego.linear_model import DemographicParityClassifier, EqualOpportunityClassifier
+#from fairlearn.postprocessing import ThresholdOptimizer
 from sklearn.model_selection import train_test_split, KFold
 from credit_pipeline import data, training, evaluate
-from credit_pipeline.models import MLPClassifier
+#from credit_pipeline.models import MLPClassifier
 
 
 import warnings
@@ -22,15 +22,15 @@ warnings.filterwarnings("ignore")
 
 MODEL_CLASS_LIST = [
     LogisticRegression,
-    MLPClassifier,
+    #MLPClassifier,
     RandomForestClassifier,
-    LGBMClassifier,
+    LGBMClassifier, 
 ]
 
 PROTECTED_ATTRIBUTES = {
     "german": "Gender",
-    "taiwan": ...,
-    "homecredit": ...,
+    "taiwan": "SEX",
+    "homecredit": "CODE_GENDER",
 }
 
 FAIRNESS_PARAM_SPACES = {}
@@ -123,7 +123,8 @@ def experiment_credit_models(args):
                 cv=None,
                 n_trials=args["n_trials"],
                 timeout=args["timeout"],
-                seed_number = args["seed"]
+                seed_number = args["seed"],
+                n_jobs = 6
             )
             Y_pred = model.predict_proba(X_train)[:, 1]
             threshold = training.ks_threshold(Y_train, Y_pred)
