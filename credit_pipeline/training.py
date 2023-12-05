@@ -389,6 +389,7 @@ def optimize_model(
     n_trials=None,
     timeout=None,
     seed_number=None,
+    n_jobs = 1,
 ):
     """Optimize hyperparameters of a machine learning model using Optuna.
     This function creates an Optuna study to search for the best hyperparameters for a given machine learning model from a specified parameter space. The objective of the study is to maximize the ROC score of the model on the validation score. It can work with a provided validation set or with cross-validation.
@@ -454,7 +455,8 @@ def optimize_model(
         ),
         n_trials=n_trials,
         timeout=timeout,
-        show_progress_bar=False,
+        show_progress_bar=True,
+        n_jobs = n_jobs
     )
 
     # Train model with best hyperparameters
