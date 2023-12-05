@@ -11,7 +11,14 @@ def prepare_datasets():
     os.makedirs("data/prepared", exist_ok=True)
 
     # home credit
-    # TODO
+    df = dex.read_csv_encoded("data/HomeCredit", "application_train.csv")
+    df = df.drop(columns = ["SK_ID_CURR", "OCCUPATION_TYPE", "ORGANIZATION_TYPE"])
+    df = df.rename(columns = {"TARGET" : "DEFAULT"})
+    cat_cols = df.loc[:, df.dtypes == "object"].columns.tolist()
+    for col in cat_cols:
+        df[col] = pd.Categorical(df[col])
+    df.to_csv("data/prepared/homecredit.csv", index=False)
+
 
     # taiwan
     df = dex.read_csv_encoded("data/Taiwan/", "Taiwan.csv")
@@ -192,8 +199,9 @@ def load_dataset(dataset_name):
     :param dataset_name: string, name of the dataset
     :return: pandas dataframe
     """
-    if dataset_name == "home_credit":
-        raise NotImplementedError
+    if dataset_name == "homecredit":
+        df = pd.read_csv("../data/prepared/homecredit.csv")
+        cat_cols = df.loc[:, df.dtypes == "object"].columns.tolist()
     elif dataset_name == "taiwan":
         df = pd.read_csv("../data/prepared/taiwan.csv")
         cat_cols = [
