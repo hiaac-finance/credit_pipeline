@@ -21,7 +21,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 MODEL_CLASS_LIST = [
-    LogisticRegression,
+    #LogisticRegression,
     #MLPClassifier,
     RandomForestClassifier,
     LGBMClassifier, 
@@ -103,7 +103,10 @@ def experiment_credit_models(args):
             args["dataset"], fold, args["seed"]
         )
         # Workaround to obtain the protected attribute as a binary column
-        pipeline_preprocess = training.create_pipeline(X_train, Y_train)
+        if args["dataset"] == "homecredit": # Small fix to not apply EBE to gender
+            pipeline_preprocess = training.create_pipeline(X_train, Y_train, crit = 4)
+        else:
+            pipeline_preprocess = training.create_pipeline(X_train, Y_train)
         pipeline_preprocess.fit(X_train, Y_train)
         X_train_preprocessed = pipeline_preprocess.transform(X_train)
         A_train = X_train_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
@@ -124,6 +127,7 @@ def experiment_credit_models(args):
                 n_trials=args["n_trials"],
                 timeout=args["timeout"],
                 seed_number = args["seed"],
+                pipeline_params={"crit" : 4} if args["dataset"] == "homecredit" else {},
                 n_jobs = 6
             )
             Y_pred = model.predict_proba(X_train)[:, 1]
