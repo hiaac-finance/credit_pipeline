@@ -21,7 +21,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 MODEL_CLASS_LIST = [
-    #LogisticRegression,
+    LogisticRegression,
     #MLPClassifier,
     RandomForestClassifier,
     LGBMClassifier, 
@@ -32,6 +32,11 @@ PROTECTED_ATTRIBUTES = {
     "taiwan": "SEX",
     "homecredit": "CODE_GENDER",
 }
+
+HOMECREDIT_PARAM_SPACE = training.hyperparam_spaces.copy()
+HOMECREDIT_PARAM_SPACE["LogisticRegression"]["solver"] = {"choices": ["saga"], "type": "categorical"}
+HOMECREDIT_PARAM_SPACE["LogisticRegression"]["max_iter"] = {"low": 100, "high": 100, "step": 1, "type": "int"}
+
 
 FAIRNESS_PARAM_SPACES = {}
 FAIRNESS_PARAM_SPACES["FairGBMClassifier"] = training.hyperparam_spaces[
@@ -96,7 +101,7 @@ def experiment_credit_models(args):
     """
     path = f"../results/credit_models/{args['dataset']}"
 
-    for fold in range(10):
+    for fold in range(7, 10):
         Path(f"{path}/{fold}").mkdir(parents=True, exist_ok=True)
         print("Fold: ", fold)
         X_train, Y_train, X_val, Y_val, X_test, Y_test = load_split(
@@ -116,9 +121,13 @@ def experiment_credit_models(args):
         
         for model_class in MODEL_CLASS_LIST:
             print("Model: ", model_class.__name__)
+            param_space = "suggest"
+            if args["dataset"] == "homecredit":
+                param_space = HOMECREDIT_PARAM_SPACE[model_class.__name__]
+            
             study, model = training.optimize_model(
                 model_class,
-                "suggest",
+                param_space,
                 X_train,
                 Y_train,
                 X_val,
