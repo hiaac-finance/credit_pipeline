@@ -30,6 +30,7 @@ requirements = [
     "fairgbm",
     "aif360",
     "scikit-lego[cxvpy]",
+    "gdown"
 ]
 
 test_requirements = [ ]
