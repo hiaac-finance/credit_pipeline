@@ -1,10 +1,10 @@
 import os
 import pandas as pd
 import credit_pipeline.data_exploration as dex
-import gdown
 
 
 def download_datasets():
+    import gdown
     """Download data from Google Drive and unzip it in the data folder."""
     url = "https://drive.google.com/uc?id=1Y7bTNsxDv-te40FnJsoca1YeB4da6TCq"
     output = "data.zip"
