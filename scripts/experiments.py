@@ -411,7 +411,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--timeout",
         type=int,
-        default=90,
+        default=100,
         help="timeout in seconds for the hyperparameter optimization",
     )
 
