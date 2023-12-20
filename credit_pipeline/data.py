@@ -9,7 +9,7 @@ def download_datasets():
     url = "https://drive.google.com/uc?id=1Y7bTNsxDv-te40FnJsoca1YeB4da6TCq"
     output = "data.zip"
     gdown.download(url, output, quiet=False)
-    os.system("unzip data.zip -d data")
+    os.system("unzip data.zip -d .")
     os.system("rm data.zip")
 
 

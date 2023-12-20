@@ -13,7 +13,7 @@ from lightgbm import LGBMClassifier
 #from fairlearn.postprocessing import ThresholdOptimizer
 from sklearn.model_selection import train_test_split, KFold
 from credit_pipeline import data, training, evaluate
-#from credit_pipeline.models import MLPClassifier
+from credit_pipeline.models import MLPClassifier
 
 
 import warnings
@@ -21,10 +21,10 @@ import warnings
 warnings.filterwarnings("ignore")
 
 MODEL_CLASS_LIST = [
-    LogisticRegression,
-    #MLPClassifier,
-    RandomForestClassifier,
-    LGBMClassifier, 
+    #LogisticRegression,
+    MLPClassifier,
+    #RandomForestClassifier,
+    #LGBMClassifier, 
 ]
 
 PROTECTED_ATTRIBUTES = {
@@ -101,7 +101,7 @@ def experiment_credit_models(args):
     """
     path = f"../results/credit_models/{args['dataset']}"
 
-    for fold in range(7, 10):
+    for fold in range(10):
         Path(f"{path}/{fold}").mkdir(parents=True, exist_ok=True)
         print("Fold: ", fold)
         X_train, Y_train, X_val, Y_val, X_test, Y_test = load_split(
