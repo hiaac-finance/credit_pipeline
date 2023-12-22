@@ -1,0 +1,3 @@
+[submodule "submodules/topsis_python"]
+	path = submodules/topsis_python
+	url = https://github.com/athyrson06/TOPSIS_Python.git
