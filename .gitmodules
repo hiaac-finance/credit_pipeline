@@ -1,5 +1,3 @@
 [submodule "TOPSIS-Python"]
 	path = TOPSIS-Python
 	url = https://github.com/SiNa88/TOPSIS-Python.git
-[submodule "Submodules/TOPSIS-Python"]
-	path = Submodules/TOPSIS-Python
