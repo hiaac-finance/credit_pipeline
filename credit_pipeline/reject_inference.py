@@ -1,8 +1,11 @@
+import os
+from pathlib import Path
 from lightgbm import LGBMClassifier
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from types import NoneType
+import joblib
 from sklearn.ensemble import IsolationForest
 
 from sklearn.model_selection import train_test_split
@@ -15,7 +18,7 @@ from sklearn.semi_supervised import LabelSpreading
 
 import credit_pipeline.training as tr
 
-
+ri_datasets_path = "../data/riData/"
 seed_number = 880
 
 params_dict = {
@@ -179,7 +182,7 @@ def calculate_kickout_metric(C1, C2, X_test_acp, y_test_acp, X_test_unl, acp_rat
     # Calculate the share of bad cases in A1
     p_B = A1_B.shape[0] / A1.shape[0]
 
-    # Calculate the number of bad cases selected by the original model
+    # Calculate the number of bad cases selected by the BM model
     SB = A1_B.shape[0]
 
     # Calculate the kickout metric value
@@ -213,7 +216,7 @@ def calculate_approval_rate(C1, X_val, y_val, X_test):
     return n_approved/X_test.shape[0]
 
 def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
-                   X_unl = None, threshold_type = 'ks', acp_rate = 0.15):
+                   X_unl = None, threshold_type = 'ks', acp_rate = 0.05):
     def get_best_threshold_with_ks(model, X, y):
         y_probs = model.predict_proba(X)[:,1]
         fpr, tpr, thresholds = roc_curve(y, y_probs)
@@ -254,7 +257,7 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
                 lambda x: roc_auc_score(y_true, x), False),
             "KS": (
                 lambda x: evaluate_ks(y_true, x), False),
-            "------": (lambda x: "", True),
+            # "------": (lambda x: 0, True),
             "Balanced Accuracy": (
                 lambda x: balanced_accuracy_score(y_true, x), True),
             "Accuracy": (
@@ -265,7 +268,7 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
                 lambda x: recall_score(y_true, x), True),
             "F1": (
                 lambda x: f1_score(y_true, x), True),
-            "-----": (lambda x: "", True),
+            # "-----": (lambda x: 0, True),
         }
         df_dict = {}
         for metric_name, (metric_func, use_preds) in metrics_dict.items():
@@ -274,48 +277,54 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
         return df_dict
 
     df_dict = get_metrics_df(models_dict, y)
-    if isinstance(X_v, NoneType):
-        if isinstance(X_unl, NoneType) or ('original' not in name_model_dict):
-            del df_dict["-----"]
+    # if isinstance(X_v, NoneType):
+    #     if isinstance(X_unl, NoneType) or ('BM' not in name_model_dict):
+    #         del df_dict["-----"]
 
     if np.any(X_v):
         df_dict['Approval Rate'] = []
-    if np.any(X_unl) and 'original' in name_model_dict:
+    if np.any(X_unl) and 'BM' in name_model_dict:
         df_dict['Kickout'] = []
         df_dict['KG'] = []
         df_dict['KB'] = []
 
     for name, model in name_model_dict.items():
-        if name != 'original':
+        if name != 'BM':
             if isinstance(model, list):
                 if np.any(X_v):
-                    df_dict['Approval Rate'].append(calculate_approval_rate(model[0], X_v, y_v, X))
-                if np.any(X_unl) and 'original' in name_model_dict:
+                    a_r = calculate_approval_rate(model[0], X_v, y_v, X)
+                    # acp_rate = a_r
+                    df_dict['Approval Rate'].append(a_r)
+                if np.any(X_unl) and 'BM' in name_model_dict:
                     kickout, kg, kb = calculate_kickout_metric(
-                        name_model_dict['original'][0], model[0], X, y, X_unl, acp_rate)
+                        name_model_dict['BM'][0], model[0], X, y, X_unl, acp_rate)
                     df_dict['Kickout'].append(kickout*10)
                     df_dict['KG'].append(kg)
                     df_dict['KB'].append(kb)
             else:
                 if np.any(X_v):
-                    df_dict['Approval Rate'].append(calculate_approval_rate(model, X_v, y_v, X))
-                if np.any(X_unl) and 'original' in name_model_dict:
-                    if isinstance(name_model_dict["original"], list):
-                        original = name_model_dict["original"][0]  # Assuming "original" is a list
+                    a_r = calculate_approval_rate(model, X_v, y_v, X)
+                    # acp_rate = a_r
+                    df_dict['Approval Rate'].append(a_r)
+                if np.any(X_unl) and 'BM' in name_model_dict:
+                    if isinstance(name_model_dict["BM"], list):
+                        benchmark = name_model_dict["BM"][0]  # Assuming "BM" is a list
                     else:
-                        original = name_model_dict["original"]
+                        benchmark = name_model_dict["BM"]
 
-                    kickout, kg, kb = calculate_kickout_metric(original, model, X, y, X_unl, acp_rate)
+                    kickout, kg, kb = calculate_kickout_metric(benchmark, model, X, y, X_unl, acp_rate)
                     df_dict['Kickout'].append(kickout*10)
                     df_dict['KG'].append(kg)
                     df_dict['KB'].append(kb)
         else:
             if np.any(X_v):
                 if isinstance(model,list):
-                    df_dict['Approval Rate'].append(calculate_approval_rate(model[0], X_v, y_v, X))
+                    a_r = calculate_approval_rate(model[0], X_v, y_v, X)
+                    df_dict['Approval Rate'].append(a_r)
                 else:
-                    df_dict['Approval Rate'].append(calculate_approval_rate(model, X_v, y_v, X))
-            if np.any(X_unl) and 'original' in name_model_dict:
+                    a_r = calculate_approval_rate(model, X_v, y_v, X)
+                    df_dict['Approval Rate'].append(a_r)
+            if np.any(X_unl) and 'BM' in name_model_dict:
                 df_dict['Kickout'].append(0)
                 df_dict['KG'].append(0)
                 df_dict['KB'].append(0)
@@ -325,11 +334,12 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
 
 
 #Iterative Pipeline With EBE
-def trusted_non_outliers(X_train, y_train, X_unl, 
+def expand_dataset(X_train, y_train, X_unl, 
                         contamination_threshold = 0.1,
                         size = 1000,
-                        clf_class = LGBMClassifier,
-                        clf_params = params_dict['LightGBM_2'],
+                        p = 0.07,
+                        rot_class = LGBMClassifier,
+                        rot_params = params_dict['LightGBM_2'],
                         seed = 880,
                         ):
     # get_shapes([X_train, y_train, X_unl, y_unl, X_test, y_test])
@@ -340,7 +350,7 @@ def trusted_non_outliers(X_train, y_train, X_unl,
 
     iso_params = {"contamination":contamination_threshold, "random_state":seed}
 
-    rotulator = tr.create_pipeline(X_train, y_train, clf_class(**clf_params),
+    rotulator = tr.create_pipeline(X_train, y_train, rot_class(**rot_params),
                                     onehot=True, normalize=True, do_EBE=True)
     rotulator.fit(X_train, y_train)
 
@@ -352,6 +362,9 @@ def trusted_non_outliers(X_train, y_train, X_unl,
         # Retrieve the samples marked as non-outliers for training
         unl_scores = iso.predict(X_unl)
         X_retrieved = X_unl[unl_scores == 1]
+        y_retrieved = pd.Series([])
+        if X_retrieved.shape[0] < 1:
+            return X_retrieved.iloc[[]], y_retrieved.iloc[[]]
         # Label the non-outliers based on the train set
         y_ret_prob = rotulator.predict_proba(X_retrieved)[:, 1]
         y_retrieved = (y_ret_prob >= 0.5).astype('int')
@@ -378,7 +391,7 @@ def trusted_non_outliers(X_train, y_train, X_unl,
 
         return X_retrieved, y_retrieved
 
-    p = 0.07#y_train.mean()
+    #y_train.mean()
     c_0 = int(size-size*p) #number of negative (0) samples to add
     c_1 = int(size*p)      #number of positive (1) samples to add
 
@@ -398,6 +411,11 @@ def trusted_non_outliers(X_train, y_train, X_unl,
     # Concat the datasets
     X_retrieved = pd.concat([X_retrieved_0, X_retrieved_1])
     y_retrieved = pd.concat([y_retrieved_0, y_retrieved_1])
+    if (y_retrieved.mean() > p + 0.03) or (y_retrieved.mean() < p - 0.03):
+        print(y_retrieved.mean())
+        flag = False
+    else:
+        flag = True
 
     # Keep the samples marked as outliers in the unlabeled/rejected set
     X_kept = X_unl.loc[~X_unl.index.isin(X_retrieved.index)]
@@ -412,9 +430,138 @@ def trusted_non_outliers(X_train, y_train, X_unl,
     # dex.get_shapes(X_train_updated, y_train_updated, X_kept, y_kept)
 
     # Return the fitted classifier, updated training and unlabeled sets
-    return X_train_updated, y_train_updated, X_kept
+    return X_train_updated, y_train_updated, X_kept, flag
 
+def create_datasets_with_ri(X_train, y_train, X_unl,
+                                iterations = 50, 
+                                contamination_threshold = 0.12,
+                                size = 1000,
+                                p = 0.07,
+                                rot_class = LGBMClassifier,
+                                rot_params = params_dict['LightGBM_2'],
+                                seed = 880,
+                                verbose = True,
+                               ):
 
+    X_train_list = [X_train]
+    y_train_list = [y_train]
+    unl_list = [X_unl]
+    log_dict = {}
+
+    updated_X_train, updated_y_train, updated_X_unl =  X_train, y_train, X_unl
+    flag = True
+
+    for i in range(iterations):
+        if verbose:
+            print("Iteration: ", i)
+        updated_X_train, updated_y_train, updated_X_unl, flag = expand_dataset(
+                                            updated_X_train, updated_y_train, updated_X_unl, 
+                                            contamination_threshold, size, p, 
+                                            rot_class, rot_params, seed,
+                                            )
+        if flag == False:
+            break
+        X_train_list.append(updated_X_train)
+        y_train_list.append(updated_y_train)
+        unl_list.append(updated_X_unl)
+
+    log_dict["X"] = X_train_list
+    log_dict["y"] = y_train_list
+    log_dict["unl"] = unl_list
+
+    return log_dict
+
+def trusted_non_outliers(X_train, y_train, X_unl,
+                                iterations = 50,
+                                contamination_threshold = 0.12,
+                                size = 1000,
+                                p = 0.07,
+                                clf_class = LGBMClassifier,
+                                clf_params = params_dict["LightGBM_2"],
+                                rot_class = LGBMClassifier,
+                                rot_params = params_dict['LightGBM_2'],
+                                seed= 880,
+                                verbose = False,
+                                output = -1,
+                                save_log = True
+                                ):
+    """_summary_
+
+    Parameters
+    ----------
+    X_train : _type_
+        _description_
+    y_train : _type_
+        _description_
+    X_unl : _type_
+        _description_
+    iterations : int, optional
+        _description_, by default 50
+    contamination_threshold : float, optional
+        _description_, by default 0.12
+    size : int, optional
+        _description_, by default 1000
+    p : float, optional
+        _description_, by default 0.07
+    clf_class : _type_, optional
+        _description_, by default LGBMClassifier
+    clf_params : _type_, optional
+        _description_, by default params_dict["LightGBM_2"]
+    rot_class : _type_, optional
+        _description_, by default LGBMClassifier
+    rot_params : _type_, optional
+        _description_, by default params_dict['LightGBM_2']
+    seed : int, optional
+        _description_, by default 880
+    verbose : bool, optional
+        _description_, by default False
+    output : int, optional
+        _description_, by default -1
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
+    clf_params.update({'random_state': seed})
+
+    datasets = create_datasets_with_ri(X_train, y_train, X_unl,
+                                iterations,
+                                contamination_threshold,
+                                size,
+                                p,
+                                rot_class,
+                                rot_params,
+                                seed,
+                                verbose)
+    
+    
+
+    if save_log == True:
+        dict_clfs = {}
+        sus_iters = len(datasets["X"])
+        for i in range(sus_iters):
+            X_train = datasets["X"][i]
+            y_train = datasets["y"][i]
+
+            trusted_clf = tr.create_pipeline(X_train, y_train, clf_class(**clf_params))
+            trusted_clf.fit(X_train, y_train)
+            
+            if i == 0:
+                dict_clfs['BM'] = trusted_clf
+            else:
+                dict_clfs['TN_'+str(i)] = trusted_clf
+                
+        filepath = Path(os.path.join(ri_datasets_path,f'TN-{seed}.joblib'))
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(dict_clfs, filepath)
+    
+    X_train = datasets["X"][output]
+    y_train = datasets["y"][output]
+
+    trusted_clf = tr.create_pipeline(X_train, y_train, clf_class(**clf_params))
+    trusted_clf.fit(X_train, y_train)
+    return {'TN': trusted_clf}
 
 
 #---------Other Strategies----------
@@ -474,7 +621,7 @@ def augmentation_with_soft_cutoff(X_train, y_train, X_unl, seed = seed_number):
     augmentation_classifier_SC = tr.create_pipeline(X_train, y_train, LGBMClassifier(**params_dict['LightGBM_2']))
     augmentation_classifier_SC.fit(X_train, y_train, classifier__sample_weight = weights_SC)
 
-    return {'aug_SC': augmentation_classifier_SC}
+    return {'A-SC': augmentation_classifier_SC}
 
 def augmentation(X_train, y_train, X_unl, mode = 'up', seed = seed_number):
     """[Augmentation,Reweighting] (Anderson, 2022), (Siddiqi, 2012)
@@ -519,13 +666,12 @@ def augmentation(X_train, y_train, X_unl, mode = 'up', seed = seed_number):
         augmentation_classifier_up = tr.create_pipeline(X_train, y_train, LGBMClassifier(**params_dict['LightGBM_2']))
         augmentation_classifier_up.fit(X_train, y_train, classifier__sample_weight = acp_weights_up)
 
-        return {'aug_up': augmentation_classifier_up}
+        return {'A-UW': augmentation_classifier_up}
     elif mode == 'down':
         augmentation_classifier_down = tr.create_pipeline(X_train, y_train, LGBMClassifier(**params_dict['LightGBM_2']))
         augmentation_classifier_down.fit(X_train, y_train, classifier__sample_weight = acp_weights_down)
 
-        return {'aug_down': augmentation_classifier_down}
-
+        return {'A-DW': augmentation_classifier_down}
 
 def fuzzy_augmentation(X_train, y_train, X_unl, seed = seed_number):
     """[Fuzzy-Parcelling](Anderson, 2022)
@@ -565,10 +711,10 @@ def fuzzy_augmentation(X_train, y_train, X_unl, seed = seed_number):
     fuzzy_classifier = tr.create_pipeline(X_fuzzy_train, y_fuzzy_train, LGBMClassifier(**params_dict['LightGBM_2']))
     fuzzy_classifier.fit(X_fuzzy_train, y_fuzzy_train, classifier__sample_weight = fuzzy_weights)
 
-    return {'fuzzy': fuzzy_classifier}
+    return {'A-FU': fuzzy_classifier}
 
 
-def extrapolation(X_train, y_train, X_unl, mode = "bad", seed = seed_number):
+def extrapolation(X_train, y_train, X_unl, mode = "C", seed = seed_number):
     """[extrapolation, hard cutoff, Simple Augmentation] (Siddiqi, 2012)
 
     Parameters
@@ -595,21 +741,23 @@ def extrapolation(X_train, y_train, X_unl, mode = "bad", seed = seed_number):
     y_label_unl_s = pd.Series(y_label_unl, index = X_unl.index)
 
     #--------------Create new Dataset----------------
-    if mode == "bad":
+    if mode == "B":
         new_X_train = pd.concat([X_train,X_unl[y_label_unl == 1]])
         new_y_train = pd.concat([y_train,y_label_unl_s[y_label_unl == 1]])
-    elif mode == "all":
+    elif mode == "A":
         new_X_train = pd.concat([X_train,X_unl])
         new_y_train = pd.concat([y_train,y_label_unl_s])
-    elif mode == "confident":
+    elif mode == "C":
         new_X_train = pd.concat([X_train,X_unl[y_prob_unl>0.8], X_unl[y_prob_unl<0.15]])
         new_y_train = pd.concat([y_train,y_label_unl_s[y_prob_unl>0.8], y_label_unl_s[y_prob_unl<0.15]])
+    else:
+        return {}
 
     #--------------Fit classifier----------------
     extrap_classifier = tr.create_pipeline(new_X_train, new_y_train, LGBMClassifier(**params_dict['LightGBM_2']))
     extrap_classifier.fit(new_X_train, new_y_train)
     # +'-'+mode
-    return {'ext': extrap_classifier}
+    return {'E-'+mode: extrap_classifier}
 
 
 def parcelling(X_train, y_train, X_unl, n_scores_interv = 100, prejudice = 3, seed = seed_number):
@@ -682,7 +830,7 @@ def parcelling(X_train, y_train, X_unl, n_scores_interv = 100, prejudice = 3, se
     parcelling_classifier = tr.create_pipeline(X_aug_train, y_aug_train, LGBMClassifier(**params_dict['LightGBM_2']))
     parcelling_classifier.fit(X_aug_train, y_aug_train)
 
-    return {'parcelling': parcelling_classifier}
+    return {'PAR': parcelling_classifier}
 
 
 def label_spreading(X_train, y_train, X_unl, seed = seed_number):
@@ -726,4 +874,4 @@ def label_spreading(X_train, y_train, X_unl, seed = seed_number):
     clf_LS = tr.create_pipeline(new_X_train, new_y_train, LGBMClassifier(**params_dict['LightGBM_2']))
     clf_LS.fit(new_X_train, new_y_train,)
 
-    return {'labelSpr': clf_LS}
+    return {'LSP': clf_LS}
