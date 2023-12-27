@@ -68,6 +68,7 @@ hyperparam_spaces = {
         "alpha": {"low": 1e-3, "high": 1e3, "type": "float", "log": True},
         "epochs": {"low": 10, "high": 100, "type": "int", "step": 10},
         "class_weight": {"choices": [None, "balanced"], "type": "categorical"},
+        "batch_size" : {"low" : 128, "high" : 128, "type" : "int"}
     },
 }
 
