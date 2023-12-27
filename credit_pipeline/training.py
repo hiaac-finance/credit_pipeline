@@ -281,7 +281,6 @@ def create_pipeline(
 def objective(
     trial,
     model_class,
-    pipeline_params,
     fit_params,
     score_func,
     param_space,
@@ -302,8 +301,6 @@ def objective(
         The trial instance from optuna.create_study().
     model_class : class with sklearn API
         The class of the machine learning model to be trained.
-    pipeline_params : dict
-        Parameters to call pipeline.
     fit_params : dict
         Parameters that are used when calling fit.
     score_func : function or str
@@ -348,9 +345,7 @@ def objective(
 
     if X_val is not None and y_val is not None:
         # Initialize and train the model
-        model = create_pipeline(
-            X_train, y_train, model_class(**params), **pipeline_params
-        )
+        model = model_class(**params)
         model.fit(X_train, y_train, **fit_params)
 
         # Predict and evaluate the model
@@ -364,9 +359,7 @@ def objective(
         for train_idx, val_idx in kf.split(X_train, y_train):
             X_train_fold, X_val_fold = X_train.iloc[train_idx], X_train.iloc[val_idx]
             y_train_fold, y_val_fold = y_train.iloc[train_idx], y_train.iloc[val_idx]
-            model = create_pipeline(
-                X_train_fold, y_train_fold, model_class(**params), **pipeline_params
-            )
+            model = model_class(**params)
             model.fit(X_train_fold, y_train_fold)
             predictions = model.predict_proba(X_val_fold)[:, 1]
             score.append(score_func(y_val_fold, predictions))
@@ -435,6 +428,17 @@ def optimize_model(
         else:
             raise ValueError("No hyperparameter space provided")
 
+    # pipeline to preprocess
+    preprocess = create_pipeline(
+        X_train,
+        y_train,
+        model_class(),
+        **pipeline_params,
+    )
+    preprocess.fit(X_train, y_train)
+    X_train_preprocessed = preprocess[:-1].transform(X_train)
+    X_val_preprocessed = preprocess[:-1].transform(X_val) if X_val is not None else None
+
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     sampler = TPESampler(seed=seed_number)
     study = optuna.create_study(direction="maximize", sampler=sampler)
@@ -442,13 +446,12 @@ def optimize_model(
         lambda trial: objective(
             trial,
             model_class,
-            pipeline_params,
             fit_params,
             score_func,
             param_space,
-            X_train,
+            X_train_preprocessed,
             y_train,
-            X_val,
+            X_val_preprocessed,
             y_val,
             cv,
             seed_number=seed_number,
