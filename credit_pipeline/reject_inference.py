@@ -4,7 +4,6 @@ from lightgbm import LGBMClassifier
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from types import NoneType
 import joblib
 from sklearn.ensemble import IsolationForest
 
@@ -17,6 +16,7 @@ from scipy.stats import ks_2samp
 from sklearn.semi_supervised import LabelSpreading
 
 import credit_pipeline.training as tr
+from submodules.topsis_python import topsis as top
 
 ri_datasets_path = "../data/riData/"
 seed_number = 880
@@ -241,6 +241,8 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
                     threshold = risk_score_threshold(model, X_v, y_v)
                 else:
                     threshold = risk_score_threshold(model, X, y)
+            else:
+                threshold = 0.5
 
             y_prob = model.predict_proba(X)[:,1]
             y_pred = (y_prob >= threshold).astype('int')
@@ -251,32 +253,44 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
         ks = ks_2samp(y_proba[y_real == 0], y_proba[y_real == 1])
         return ks.statistic
 
-    def get_metrics_df(models_dict, y_true,):
-        metrics_dict = {
-            "Overall AUC": (
-                lambda x: roc_auc_score(y_true, x), False),
-            "KS": (
-                lambda x: evaluate_ks(y_true, x), False),
-            # "------": (lambda x: 0, True),
-            "Balanced Accuracy": (
-                lambda x: balanced_accuracy_score(y_true, x), True),
-            "Accuracy": (
-                lambda x: accuracy_score(y_true, x), True),
-            "Precision": (
-                lambda x: precision_score(y_true, x), True),
-            "Recall": (
-                lambda x: recall_score(y_true, x), True),
-            "F1": (
-                lambda x: f1_score(y_true, x), True),
-            # "-----": (lambda x: 0, True),
-        }
+    def get_metrics_df(models_dict, y_true, use_threshold):
+        if use_threshold:
+            metrics_dict = {
+                "Overall AUC": (
+                    lambda x: roc_auc_score(y_true, x), False),
+                "KS": (
+                    lambda x: evaluate_ks(y_true, x), False),
+                # "------": (lambda x: 0, True),
+                "Balanced Accuracy": (
+                    lambda x: balanced_accuracy_score(y_true, x), True),
+                "Accuracy": (
+                    lambda x: accuracy_score(y_true, x), True),
+                "Precision": (
+                    lambda x: precision_score(y_true, x), True),
+                "Recall": (
+                    lambda x: recall_score(y_true, x), True),
+                "F1": (
+                    lambda x: f1_score(y_true, x), True),
+                # "-----": (lambda x: 0, True),
+            }
+        else:
+            metrics_dict = {
+                "Overall AUC": (
+                    lambda x: roc_auc_score(y_true, x), False),
+                "KS": (
+                    lambda x: evaluate_ks(y_true, x), False),
+            }
         df_dict = {}
         for metric_name, (metric_func, use_preds) in metrics_dict.items():
             df_dict[metric_name] = [metric_func(preds) if use_preds else metric_func(scores)
                                     for model_name, (preds, scores) in models_dict.items()]
         return df_dict
+    if threshold_type != 'none':
+        use_threshold = True
+    else:
+        use_threshold = False
 
-    df_dict = get_metrics_df(models_dict, y)
+    df_dict = get_metrics_df(models_dict, y, use_threshold)
     # if isinstance(X_v, NoneType):
     #     if isinstance(X_unl, NoneType) or ('BM' not in name_model_dict):
     #         del df_dict["-----"]
@@ -472,6 +486,7 @@ def create_datasets_with_ri(X_train, y_train, X_unl,
     return log_dict
 
 def trusted_non_outliers(X_train, y_train, X_unl,
+                                X_val, y_val,
                                 iterations = 50,
                                 contamination_threshold = 0.12,
                                 size = 1000,
@@ -534,24 +549,31 @@ def trusted_non_outliers(X_train, y_train, X_unl,
                                 rot_params,
                                 seed,
                                 verbose)
-    
-    
+    dict_clfs = {}
+    sus_iters = len(datasets["X"])
+    for i in range(sus_iters):
+        X_train = datasets["X"][i]
+        y_train = datasets["y"][i]
+
+        trusted_clf = tr.create_pipeline(X_train, y_train, clf_class(**clf_params))
+        trusted_clf.fit(X_train, y_train)
+        
+        if i == 0:
+            dict_clfs['BM'] = trusted_clf
+        else:
+            dict_clfs['TN_'+str(i)] = trusted_clf
+
+    metrics_value = get_metrics_RI(dict_clfs, X_val, y_val, X_unl=X_unl, threshold_type='none')
+
+    values = metrics_value.loc[["Overall AUC", "KS", "Kickout"]].T.to_numpy()
+    weights = [1,1,1]
+    criterias = np.array([True, True, True])
+    t = top.Topsis(values, weights, criterias)
+    t.calc()
+    output = t.rank_to_best_similarity()[0] - 1
+
 
     if save_log == True:
-        dict_clfs = {}
-        sus_iters = len(datasets["X"])
-        for i in range(sus_iters):
-            X_train = datasets["X"][i]
-            y_train = datasets["y"][i]
-
-            trusted_clf = tr.create_pipeline(X_train, y_train, clf_class(**clf_params))
-            trusted_clf.fit(X_train, y_train)
-            
-            if i == 0:
-                dict_clfs['BM'] = trusted_clf
-            else:
-                dict_clfs['TN_'+str(i)] = trusted_clf
-                
         filepath = Path(os.path.join(ri_datasets_path,f'TN-{seed}.joblib'))
         filepath.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(dict_clfs, filepath)
