@@ -229,14 +229,14 @@ def create_fairness_scorer(fairness_goal, z, M = 10, benefit_class=1):
     benefit_class : int, optional
         Label of positive class to calculate metric, by default 1
     """
-    def fairness_scorer(y_true, y_pred):
+    def fairness_scorer(y_true, y_pred, y_score_pred):
         y_true_ = (y_true == benefit_class).astype("float")
         y_pred_ = (y_pred == benefit_class).astype("float")
         fairness_score = np.abs(equal_opportunity(y_true_, y_pred_, z))
         if fairness_score <= fairness_goal:
-            return roc_auc_score(y_true_, y_pred_)
+            return roc_auc_score(y_true, y_score_pred)
         else:
-            return roc_auc_score(y_true_, y_pred_) - M * abs(fairness_score - fairness_goal)
+            return roc_auc_score(y_true, y_score_pred) - M * abs(fairness_score - fairness_goal)
     return fairness_scorer
 
 
