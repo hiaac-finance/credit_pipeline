@@ -470,6 +470,104 @@ def optimize_model(
     model.fit(X_train, y_train)
     return study, model
 
+
+def optimize_model_fast(
+    model_class,
+    param_space,
+    X_train,
+    y_train,
+    X_val,
+    y_val,
+    pipeline_params={},
+    fit_params={},
+    score_func="roc_auc",
+    n_trials=None,
+    timeout=None,
+    seed_number=None,
+    n_jobs=1,
+):
+    """Optimize hyperparameters of a machine learning model (with Scikit API) using Optuna.
+    This is a faster version of the optimization as it only fits the final model, and not the complete pipeline.
+    The objective is to maximize the metric "score_func" at the validation dataset. "score_func" must be the string "roc_auc" or a function that will be called with validation prediction.
+    Parameter spaces for LogisticRegression, RandomForestClassifier, LGBMClassifier, and MLPClassifier are provided by default. For any model, a custom parameter space can be provided.
+
+    Parameters
+    ----------
+
+    model_class : class with sklearn API
+        The class of the machine learning model to be trained.
+    param_space: dict with param spaces or string "suggest"
+        description of parameter spaces, pass string "suggest" to use default spaces
+    X_train: pandas.DataFrame or numpy.ndarray
+        Training data features.
+    y_train: array-like
+        Training data target.
+    X_val: pandas.DataFrame or numpy.ndarray
+        Validation data features.
+    y_val: array-like
+        Validation data target.
+    pipeline_params: dict, optional, default={}
+        Parameters to call pipeline.
+    fit_params: dict, optional, default={}
+        Parameters that are used when calling fit.
+    score_func: str, default="roc_auc"
+        Scoring function to use, must be according to sklearn API.
+    n_trials: int, default=100
+        Number of trials.
+    timeout: int, optional, default=None
+        Number of seconds
+    seed_number: int, default=None
+        Random seed number.
+
+    Returns
+    -------
+    (optuna.study.Study, sklearn.pipeline.Pipeline) - study and model
+    """
+
+    def objective_fast_(
+        trial,
+        model_class,
+        fit_params,
+        score_func,
+        param_space,
+        X_train,
+        y_train,
+        X_val,
+        y_val,
+        seed_number,
+    ):
+        params = {}
+        for name, values in param_space.items():
+            if values["type"] == "int":
+                values_cp = {n: v for n, v in values.items() if n != "type"}
+                params[name] = trial.suggest_int(name, **values_cp)
+            elif values["type"] == "categorical":
+                values_cp = {n: v for n, v in values.items() if n != "type"}
+                params[name] = trial.suggest_categorical(name, **values_cp)
+            elif values["type"] == "float":  # corrected this line
+                values_cp = {n: v for n, v in values.items() if n != "type"}
+                params[name] = trial.suggest_float(name, **values_cp)
+
+        params["random_state"] = seed_number
+
+        if type(score_func) == str and score_func == "roc_auc":
+            score_func = roc_auc_score
+
+        model = model_class(**params)
+        model.fit(X_train, y_train, **fit_params)
+
+        # Predict and evaluate the model
+        predictions = model.predict_proba(X_val)[:, 1]
+        score = score_func(y_val, predictions)
+
+        return score
+
+    if param_space == "suggest":
+        if model_class.__name__ in hyperparam_spaces.keys():
+            param_space = hyperparam_spaces[model_class.__name__]
+        else:
+            raise ValueError("No hyperparameter space provided")
+
     # pipeline to preprocess
     preprocess = create_pipeline(
         X_train,
@@ -479,13 +577,13 @@ def optimize_model(
     )
     preprocess.fit(X_train, y_train)
     X_train_preprocessed = preprocess[:-1].transform(X_train)
-    X_val_preprocessed = preprocess[:-1].transform(X_val) if X_val is not None else None
+    X_val_preprocessed = preprocess[:-1].transform(X_val)
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     sampler = TPESampler(seed=seed_number)
     study = optuna.create_study(direction="maximize", sampler=sampler)
     study.optimize(
-        lambda trial: objective(
+        lambda trial: objective_fast_(
             trial,
             model_class,
             fit_params,
@@ -495,13 +593,12 @@ def optimize_model(
             y_train,
             X_val_preprocessed,
             y_val,
-            cv,
             seed_number=seed_number,
         ),
         n_trials=n_trials,
         timeout=timeout,
         show_progress_bar=True,
-        n_jobs = n_jobs
+        n_jobs=n_jobs,
     )
 
     # Train model with best hyperparameters
