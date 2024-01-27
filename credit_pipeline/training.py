@@ -281,6 +281,7 @@ def create_pipeline(
 def objective(
     trial,
     model_class,
+    pipeline_params,
     fit_params,
     score_func,
     param_space,
@@ -301,6 +302,8 @@ def objective(
         The trial instance from optuna.create_study().
     model_class : class with sklearn API
         The class of the machine learning model to be trained.
+    pipeline_params : dict
+        Parameters to call pipeline.
     fit_params : dict
         Parameters that are used when calling fit.
     score_func : function or str
@@ -345,7 +348,9 @@ def objective(
 
     if X_val is not None and y_val is not None:
         # Initialize and train the model
-        model = model_class(**params)
+        model = create_pipeline(
+            X_train, y_train, model_class(**params), **pipeline_params
+        )
         model.fit(X_train, y_train, **fit_params)
 
         # Predict and evaluate the model
@@ -359,7 +364,9 @@ def objective(
         for train_idx, val_idx in kf.split(X_train, y_train):
             X_train_fold, X_val_fold = X_train.iloc[train_idx], X_train.iloc[val_idx]
             y_train_fold, y_val_fold = y_train.iloc[train_idx], y_train.iloc[val_idx]
-            model = model_class(**params)
+            model = create_pipeline(
+                X_train_fold, y_train_fold, model_class(**params), **pipeline_params
+            )
             model.fit(X_train_fold, y_train_fold)
             predictions = model.predict_proba(X_val_fold)[:, 1]
             score.append(score_func(y_val_fold, predictions))
@@ -382,7 +389,7 @@ def optimize_model(
     n_trials=None,
     timeout=None,
     seed_number=None,
-    n_jobs = 1,
+    n_jobs=1,
 ):
     """Optimize hyperparameters of a machine learning model using Optuna.
     This function creates an Optuna study to search for the best hyperparameters for a given machine learning model from a specified parameter space. The objective of the study is to maximize the ROC score of the model on the validation score. It can work with a provided validation set or with cross-validation.
@@ -427,6 +434,41 @@ def optimize_model(
             param_space = hyperparam_spaces[model_class.__name__]
         else:
             raise ValueError("No hyperparameter space provided")
+
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    sampler = TPESampler(seed=seed_number)
+    study = optuna.create_study(direction="maximize", sampler=sampler)
+    study.optimize(
+        lambda trial: objective(
+            trial,
+            model_class,
+            pipeline_params,
+            fit_params,
+            score_func,
+            param_space,
+            X_train,
+            y_train,
+            X_val,
+            y_val,
+            cv,
+            seed_number=seed_number,
+        ),
+        n_trials=n_trials,
+        timeout=timeout,
+        show_progress_bar=True,
+        n_jobs=n_jobs,
+    )
+
+    # Train model with best hyperparameters
+    best_params = study.best_params
+    model = create_pipeline(
+        X_train,
+        y_train,
+        model_class(random_state=seed_number, **best_params),
+        **pipeline_params,
+    )
+    model.fit(X_train, y_train)
+    return study, model
 
     # pipeline to preprocess
     preprocess = create_pipeline(
