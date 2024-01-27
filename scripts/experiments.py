@@ -6,11 +6,12 @@ from pathlib import Path
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from lightgbm import LGBMClassifier
-#from aif360.datasets import BinaryLabelDataset
-#from aif360.algorithms.preprocessing import Reweighing
-#from fairgbm import FairGBMClassifier
-#from sklego.linear_model import DemographicParityClassifier, EqualOpportunityClassifier
-#from fairlearn.postprocessing import ThresholdOptimizer
+
+# from aif360.datasets import BinaryLabelDataset
+# from aif360.algorithms.preprocessing import Reweighing
+# from fairgbm import FairGBMClassifier
+# from sklego.linear_model import DemographicParityClassifier, EqualOpportunityClassifier
+# from fairlearn.postprocessing import ThresholdOptimizer
 from sklearn.model_selection import train_test_split, KFold
 from credit_pipeline import data, training, evaluate
 from credit_pipeline.models import MLPClassifier
@@ -21,10 +22,10 @@ import warnings
 warnings.filterwarnings("ignore")
 
 MODEL_CLASS_LIST = [
-    #LogisticRegression,
+    # LogisticRegression,
     MLPClassifier,
-    #RandomForestClassifier,
-    #LGBMClassifier, 
+    # RandomForestClassifier,
+    # LGBMClassifier,
 ]
 
 PROTECTED_ATTRIBUTES = {
@@ -34,8 +35,16 @@ PROTECTED_ATTRIBUTES = {
 }
 
 HOMECREDIT_PARAM_SPACE = training.hyperparam_spaces.copy()
-HOMECREDIT_PARAM_SPACE["LogisticRegression"]["solver"] = {"choices": ["saga"], "type": "categorical"}
-HOMECREDIT_PARAM_SPACE["LogisticRegression"]["max_iter"] = {"low": 100, "high": 100, "step": 1, "type": "int"}
+HOMECREDIT_PARAM_SPACE["LogisticRegression"]["solver"] = {
+    "choices": ["saga"],
+    "type": "categorical",
+}
+HOMECREDIT_PARAM_SPACE["LogisticRegression"]["max_iter"] = {
+    "low": 100,
+    "high": 100,
+    "step": 1,
+    "type": "int",
+}
 
 
 FAIRNESS_PARAM_SPACES = {}
@@ -108,8 +117,8 @@ def experiment_credit_models(args):
             args["dataset"], fold, args["seed"]
         )
         # Workaround to obtain the protected attribute as a binary column
-        if args["dataset"] == "homecredit": # Small fix to not apply EBE to gender
-            pipeline_preprocess = training.create_pipeline(X_train, Y_train, crit = 4)
+        if args["dataset"] == "homecredit":  # Small fix to not apply EBE to gender
+            pipeline_preprocess = training.create_pipeline(X_train, Y_train, crit=4)
         else:
             pipeline_preprocess = training.create_pipeline(X_train, Y_train)
         pipeline_preprocess.fit(X_train, Y_train)
@@ -118,26 +127,25 @@ def experiment_credit_models(args):
         X_test_preprocessed = pipeline_preprocess.transform(X_test)
         A_test = X_test_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
         del X_train_preprocessed, X_test_preprocessed, pipeline_preprocess
-        
+
         for model_class in MODEL_CLASS_LIST:
             print("Model: ", model_class.__name__)
             param_space = "suggest"
             if args["dataset"] == "homecredit":
                 param_space = HOMECREDIT_PARAM_SPACE[model_class.__name__]
-            
-            study, model = training.optimize_model(
+
+            study, model = training.optimize_model_fast(
                 model_class,
                 param_space,
                 X_train,
                 Y_train,
                 X_val,
                 Y_val,
-                cv=None,
                 n_trials=args["n_trials"],
                 timeout=args["timeout"],
-                seed_number = args["seed"],
-                pipeline_params={"crit" : 4} if args["dataset"] == "homecredit" else {},
-                n_jobs = 6
+                seed_number=args["seed"],
+                pipeline_params={"crit": 4} if args["dataset"] == "homecredit" else {},
+                n_jobs=6,
             )
             Y_pred = model.predict_proba(X_train)[:, 1]
             threshold = training.ks_threshold(Y_train, Y_pred)
@@ -204,6 +212,9 @@ def experiment_fairness(args):
         X_train, Y_train, X_val, Y_val, X_test, Y_test = load_split(
             args["dataset"], fold, args["seed"]
         )
+        scorer_validation = evaluate.create_fairness_scorer(
+            FAIRNESS_GOAL[args["dataset"]], A_val
+        )
 
         # Reweighting
         print("Model: Reweighing")
@@ -228,15 +239,15 @@ def experiment_fairness(args):
         rw_weights = rw.transform(X_train_aif).instance_weights
         for model_class in MODEL_CLASS_LIST:
             print("Model: ", model_class.__name__)
-            study, model = training.optimize_model(
+            study, model = training.optimize_model_fast(
                 model_class,
                 "suggest",
                 X_train,
                 Y_train,
                 X_val,
                 Y_val,
-                cv=None,
-                fit_params={"classifier__sample_weight": rw_weights},
+                fit_params={"sample_weight": rw_weights},
+                score_func=scorer_validation,
                 n_trials=args["n_trials"],
                 timeout=args["timeout"],
             )
@@ -275,14 +286,14 @@ def experiment_fairness(args):
                 "choices": [1],
                 "type": "categorical",
             }
-            study, model = training.optimize_model(
+            study, model = training.optimize_model_fast(
                 model_class,
                 param_space,
                 X_train,
                 Y_train,
                 X_val,
                 Y_val,
-                cv=None,
+                score_func=scorer_validation,
                 n_trials=args["n_trials"],
                 timeout=args["timeout"],
             )
@@ -312,15 +323,15 @@ def experiment_fairness(args):
 
         model_class = FairGBMClassifier
         print("Model: ", model_class.__name__)
-        study, model = training.optimize_model(
+        study, model = training.optimize_model_fast(
             model_class,
             FAIRNESS_PARAM_SPACES[model_class.__name__],
             X_train,
             Y_train,
             X_val,
             Y_val,
-            cv=None,
-            fit_params={"classifier__constraint_group": A_train},
+            fit_params={"constraint_group": A_train},
+            score_func=scorer_validation,
             n_trials=args["n_trials"],
             timeout=args["timeout"],
         )
