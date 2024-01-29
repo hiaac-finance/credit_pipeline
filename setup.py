@@ -14,6 +14,7 @@ requirements = [
     "pandas<2.1.0",
     "numpy",
     "scikit-learn",
+    "tensorflow",
     "matplotlib",
     "seaborn",
     "dash-bio",
@@ -29,6 +30,7 @@ requirements = [
     "fairgbm",
     "aif360",
     "scikit-lego[cxvpy]",
+    "gdown"
 ]
 
 test_requirements = [ ]
@@ -53,7 +55,7 @@ setup(
             'credit_pipeline=credit_pipeline.cli:main',
         ],
     },
-    install_requires=requirements,
+    #install_requires=requirements,
     license="MIT license",
     long_description=readme + '\n\n' + history,
     include_package_data=True,

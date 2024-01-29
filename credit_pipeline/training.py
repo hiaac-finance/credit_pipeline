@@ -19,49 +19,56 @@ import optuna
 
 hyperparam_spaces = {
     "LogisticRegression": {
-        "C": {"low": 0.001, "high": 10, "log": True, "type": "float"},
+        "C": {"low": 1e-3, "high": 1e3, "log": True, "type": "float"},
+        "tol": {"low": 1e-6, "high": 1e-3, "log": True, "type": "float"},
+        "class_weight": {"choices": [None, "balanced"], "type": "categorical"},
         "max_iter": {"low": 1000, "high": 1000, "step": 1, "type": "int"},
         "penalty": {"choices": ["l1", "l2"], "type": "categorical"},
-        "class_weight": {"choices": [None, "balanced"], "type": "categorical"},
         "solver": {"choices": ["liblinear"], "type": "categorical"},
     },
     "RandomForestClassifier": {
-        "n_estimators": {"low": 10, "high": 150, "step": 20, "type": "int"},
-        "max_depth": {"low": 2, "high": 10, "type": "int"},
+        "n_estimators": {"low": 5, "high": 250, "type": "int"},
+        "max_depth": {"low": 2, "high": 12, "type": "int"},
         "criterion": {"choices": ["gini", "entropy"], "type": "categorical"},
-        "min_samples_leaf": {"low": 1, "high": 51, "step": 5, "type": "int"},
+        "min_samples_split": {"low": 2, "high": 256, "type": "int"},
+        "min_samples_leaf": {"low": 1, "high": 256, "type": "int"},
         "max_features": {"low": 0.1, "high": 1.0, "type": "float"},
         "class_weight": {"choices": [None, "balanced"], "type": "categorical"},
     },
     "LGBMClassifier": {
-        "learning_rate": {"low": 0.01, "high": 1.0, "type": "float", "log": True},
-        "num_leaves": {"low": 5, "high": 100, "step": 5, "type": "int"},
-        "max_depth": {"low": 2, "high": 10, "type": "int"},
-        "min_child_samples": {"low": 1, "high": 51, "step": 5, "type": "int"},
+        "n_estimators": {"low": 5, "high": 250, "type": "int"},
+        "learning_rate": {"low": 0.05, "high": 1.0, "type": "float"},
+        "num_leaves": {"low": 4, "high": 256, "type": "int"},
+        "max_depth": {"low": 2, "high": 12, "type": "int"},
+        "min_child_samples": {"low": 1, "high": 256, "type": "int"},
         "colsample_bytree": {"low": 0.1, "high": 1.0, "type": "float"},
-        "reg_alpha": {"low": 0.0, "high": 1.0, "type": "float"},
-        "reg_lambda": {"low": 0.0, "high": 1.0, "type": "float"},
-        "n_estimators": {"low": 5, "high": 100, "step": 5, "type": "int"},
+        "reg_alpha": {"low": 1e-3, "high": 1e3, "log": True, "type": "float"},
+        "reg_lambda": {"low": 1e-3, "high": 1e3, "log": True, "type": "float"},
         "class_weight": {"choices": [None, "balanced"], "type": "categorical"},
         "verbose": {"choices": [-1], "type": "categorical"},
     },
     "MLPClassifier": {
         "hidden_layer_sizes": {
             "choices": [
-                [128, 64, 32],
-                [128, 64, 32, 16],
-                [256, 128, 64, 32, 16],
+                [32],
+                [64],
+                [128],
+                [32, 16],
+                [64, 32],
+                [64, 32, 16],
             ],
             "type": "categorical",
         },
-        "alpha": {"low": 0.0001, "high": 0.01, "type": "float", "log": True},
-        "learning_rate": {
-            "choices": ["constant", "invscaling", "adaptive"],
-            "type": "categorical",
-        },
         "learning_rate_init": {"low": 0.001, "high": 0.1, "type": "float", "log": True},
-        "early_stopping": {"choices": [True], "type": "categorical"},
-        "max_iter": {"choices": [50], "type": "categorical"},
+        "learning_rate_decay_rate": {
+            "low": 0.1,
+            "high": 1,
+            "type": "float",
+        },
+        "alpha": {"low": 1e-3, "high": 1e3, "type": "float", "log": True},
+        "epochs": {"low": 10, "high": 100, "type": "int", "step": 10},
+        "class_weight": {"choices": [None, "balanced"], "type": "categorical"},
+        "batch_size" : {"low" : 128, "high" : 128, "type" : "int"}
     },
 }
 
@@ -155,7 +162,7 @@ def create_pipeline(
     onehot=True,
     onehotdrop=False,
     normalize=True,
-    do_EBE=False,
+    do_EBE=True,
     crit=3,
 ):
     if cat_cols == "infer":
@@ -169,7 +176,6 @@ def create_pipeline(
         num_cols = X.columns.difference(cat_cols).tolist()
         ebe_cols = [col for col in cat_cols if X[col].nunique() >= crit if do_EBE]
         cat_cols = [item for item in cat_cols if item not in ebe_cols]
-
 
     # check if need EBE
     if do_EBE:
@@ -207,6 +213,7 @@ def create_pipeline(
             (
                 "cat",
                 OrdinalEncoder(
+                    dtype=np.int64,
                     handle_unknown="use_encoded_value",
                     unknown_value=-1,
                     encoded_missing_value=-1,
@@ -218,6 +225,7 @@ def create_pipeline(
                 EBE()
                 if do_EBE
                 else OrdinalEncoder(
+                    dtype=np.int64,
                     handle_unknown="use_encoded_value",
                     unknown_value=-1,
                     encoded_missing_value=-1,
@@ -275,55 +283,53 @@ def objective(
     trial,
     model_class,
     pipeline_params,
+    fit_params,
+    score_func,
     param_space,
     X_train,
     y_train,
     X_val,
     y_val,
     cv,
-    seed_number=0,
+    seed_number,
 ):
-    """
-    Objective function for optimizing machine learning models using Optuna. This function serves as the objective for an Optuna study, aiming to find the best hyperparameters
+    """Objective function for optimizing machine learning models using Optuna. This function serves as the objective for an Optuna study, aiming to find the best hyperparameters
     for a machine learning model from a given parameter space. It initializes the model with hyperparameters
     suggested by Optuna, trains it, and then evaluates it using a specified scoring metric.
 
+    Parameters
+    ----------
+    trial : optuna.trial.Trial
+        The trial instance from optuna.create_study().
+    model_class : class with sklearn API
+        The class of the machine learning model to be trained.
+    pipeline_params : dict
+        Parameters to call pipeline.
+    fit_params : dict
+        Parameters that are used when calling fit.
+    score_func : function or str
+        Scoring function to use, must be according to sklearn API. If string, it must be one in ["roc_auc"].
+    param_space : dict
+        Description of parameter spaces.
+    X_train : array-like
+        Training data features.
+    y_train : array-like
+        Training data target.
+    X_val : array-like or None
+        Validation data features.
+    y_val : array-like or None
+        Validation data target.
+    cv : int
+        Number of folds for cross-validation if validation set is not provided.
+    seed_number : int or None
+        Random seed.
 
-    :param trial: The trial instance from Optuna.
-    :type trial: optuna.trial.Trial
-    :param model_class: The class of the machine learning model to be trained.
-    :type model_class: class with sklearn API
-    :param pipeline_params: parameters of pipeline
-    :type pipeline_params: dict
-    :param param_space: description of parameter spaces
-    :type param_space: dict
-    :param X_train: Training data features.
-    :type X_train: pandas.DataFrame or numpy.ndarray
-    :param y_train: Training data target.
-    :type y_train: pandas.Series or numpy.ndarray
-    :param X_val: Validation data features.
-    :type X_val: pandas.DataFrame or numpy.ndarray
-    :param y_val: Validation data target.
-    :type y_val: pandas.Series or numpy.ndarray
-    :param cv: number of folds for cross-validation if validation is not provided, defaults to 5
-    :type cv: int
-    :param seed_number: random seed, defaults to 0
-    :type seed_number: int, optional
-    :return: score of the model with validation or mean score with cross-validation
-    :rtype: float
+    Returns
+    -------
+    float
+        The score of the model on the validation set.
 
-    :Example:
-
-    >>> from sklearn.ensemble import RandomForestRegressor
-    >>> from sklearn.metrics import mean_squared_error
-    >>> param_space = {
-    ...     'n_estimators': (10, 100, 10),
-    ...     'max_depth': (3, 10),
-    ...     'min_samples_split': [2, 3, 4]
-    ... }
-    >>> objective(trial, RandomForestRegressor, param_space, X_train, y_train, mean_squared_error)
     """
-    # Extract hyperparameters from the parameter space
     params = {}
     for name, values in param_space.items():
         if values["type"] == "int":
@@ -338,17 +344,22 @@ def objective(
 
     params["random_state"] = seed_number
 
+    if type(score_func) == str and score_func == "roc_auc":
+        score_func = roc_auc_score
+
     if X_val is not None and y_val is not None:
         # Initialize and train the model
         model = create_pipeline(
             X_train, y_train, model_class(**params), **pipeline_params
         )
-        model.fit(X_train, y_train)
+        model.fit(X_train, y_train, **fit_params)
 
         # Predict and evaluate the model
         predictions = model.predict_proba(X_val)[:, 1]
-        score = roc_auc_score(y_val, predictions)
+        score = score_func(y_val, predictions)
     else:
+        if fit_params != {}:
+            raise ValueError("fit_params can only be specified with validation set")
         score = []
         kf = StratifiedKFold(n_splits=cv, shuffle=True, random_state=seed_number)
         for train_idx, val_idx in kf.split(X_train, y_train):
@@ -359,7 +370,7 @@ def objective(
             )
             model.fit(X_train_fold, y_train_fold)
             predictions = model.predict_proba(X_val_fold)[:, 1]
-            score.append(roc_auc_score(y_val_fold, predictions))
+            score.append(score_func(y_val_fold, predictions))
         score = np.mean(score)
 
     return score
@@ -374,9 +385,12 @@ def optimize_model(
     y_val=None,
     cv=5,
     pipeline_params={},
+    fit_params={},
+    score_func="roc_auc",
     n_trials=None,
     timeout=None,
-    seed_number=0,
+    seed_number=None,
+    n_jobs=1,
 ):
     """Optimize hyperparameters of a machine learning model using Optuna.
     This function creates an Optuna study to search for the best hyperparameters for a given machine learning model from a specified parameter space. The objective of the study is to maximize the ROC score of the model on the validation score. It can work with a provided validation set or with cross-validation.
@@ -396,18 +410,22 @@ def optimize_model(
     X_val: pandas.DataFrame or numpy.ndarray, default=None
         Validation data features.
     y_val: array-like, default=None
-        Validation data target. 
+        Validation data target.
     cv: int, optional, default=5
         Number of folds for cross-validation
     pipeline_params: dict, optional, default={}
         Parameters to call pipeline.
+    fit_params: dict, optional, default={}
+        Parameters that are used when calling fit.
+    score_func: str, default="roc_auc"
+        Scoring function to use, must be according to sklearn API.
     n_trials: int, default=100
         Number of trials.
     timeout: int, optional, default=None
         Number of seconds
-    seed_number: int, default=0
+    seed_number: int, default=None
         Random seed number.
-    
+
     Returns
     -------
     (optuna.study.Study, sklearn.pipeline.Pipeline) - study and model
@@ -426,6 +444,8 @@ def optimize_model(
             trial,
             model_class,
             pipeline_params,
+            fit_params,
+            score_func,
             param_space,
             X_train,
             y_train,
@@ -436,7 +456,150 @@ def optimize_model(
         ),
         n_trials=n_trials,
         timeout=timeout,
-        show_progress_bar=False,
+        show_progress_bar=True,
+        n_jobs=n_jobs,
+    )
+
+    # Train model with best hyperparameters
+    best_params = study.best_params
+    model = create_pipeline(
+        X_train,
+        y_train,
+        model_class(random_state=seed_number, **best_params),
+        **pipeline_params,
+    )
+    model.fit(X_train, y_train)
+    return study, model
+
+
+def optimize_model_fast(
+    model_class,
+    param_space,
+    X_train,
+    y_train,
+    X_val,
+    y_val,
+    pipeline_params={},
+    fit_params={},
+    score_func="roc_auc",
+    n_trials=None,
+    timeout=None,
+    seed_number=None,
+    n_jobs=1,
+):
+    """Optimize hyperparameters of a machine learning model (with Scikit API) using Optuna.
+    This is a faster version of the optimization as it only fits the final model, and not the complete pipeline.
+    The objective is to maximize the metric "score_func" at the validation dataset. "score_func" must be the string "roc_auc" or a function that will be called with validation prediction.
+    Parameter spaces for LogisticRegression, RandomForestClassifier, LGBMClassifier, and MLPClassifier are provided by default. For any model, a custom parameter space can be provided.
+
+    Parameters
+    ----------
+
+    model_class : class with sklearn API
+        The class of the machine learning model to be trained.
+    param_space: dict with param spaces or string "suggest"
+        description of parameter spaces, pass string "suggest" to use default spaces
+    X_train: pandas.DataFrame or numpy.ndarray
+        Training data features.
+    y_train: array-like
+        Training data target.
+    X_val: pandas.DataFrame or numpy.ndarray
+        Validation data features.
+    y_val: array-like
+        Validation data target.
+    pipeline_params: dict, optional, default={}
+        Parameters to call pipeline.
+    fit_params: dict, optional, default={}
+        Parameters that are used when calling fit.
+    score_func: str, default="roc_auc"
+        Scoring function to use, must be according to sklearn API.
+    n_trials: int, default=100
+        Number of trials.
+    timeout: int, optional, default=None
+        Number of seconds
+    seed_number: int, default=None
+        Random seed number.
+
+    Returns
+    -------
+    (optuna.study.Study, sklearn.pipeline.Pipeline) - study and model
+    """
+
+    def objective_fast_(
+        trial,
+        model_class,
+        fit_params,
+        score_func,
+        param_space,
+        X_train,
+        y_train,
+        X_val,
+        y_val,
+        seed_number,
+    ):
+        params = {}
+        for name, values in param_space.items():
+            if values["type"] == "int":
+                values_cp = {n: v for n, v in values.items() if n != "type"}
+                params[name] = trial.suggest_int(name, **values_cp)
+            elif values["type"] == "categorical":
+                values_cp = {n: v for n, v in values.items() if n != "type"}
+                params[name] = trial.suggest_categorical(name, **values_cp)
+            elif values["type"] == "float":  # corrected this line
+                values_cp = {n: v for n, v in values.items() if n != "type"}
+                params[name] = trial.suggest_float(name, **values_cp)
+
+        params["random_state"] = seed_number
+
+        if type(score_func) == str and score_func == "roc_auc":
+            score_func = roc_auc_score
+
+        model = model_class(**params)
+        model.fit(X_train, y_train, **fit_params)
+
+        # Predict and evaluate the model
+        predictions = model.predict_proba(X_val)[:, 1]
+        score = score_func(y_val, predictions)
+
+        return score
+
+    if param_space == "suggest":
+        if model_class.__name__ in hyperparam_spaces.keys():
+            param_space = hyperparam_spaces[model_class.__name__]
+        else:
+            raise ValueError("No hyperparameter space provided")
+
+    # pipeline to preprocess
+    preprocess = create_pipeline(
+        X_train,
+        y_train,
+        model_class(),
+        **pipeline_params,
+    )
+    preprocess.fit(X_train, y_train)
+    X_train_preprocessed = preprocess[:-1].transform(X_train)
+    X_val_preprocessed = preprocess[:-1].transform(X_val)
+
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    sampler = TPESampler(seed=seed_number)
+    study = optuna.create_study(direction="maximize", sampler=sampler)
+    study.optimize(
+        lambda trial: objective_fast_(
+            trial,
+            model_class,
+            fit_params,
+            score_func,
+            param_space,
+            X_train_preprocessed,
+            y_train,
+            X_val_preprocessed,
+            y_val,
+            seed_number=seed_number,
+        ),
+        n_trials=n_trials,
+        timeout=timeout,
+        show_progress_bar=True,
+        n_jobs=n_jobs,
     )
 
     # Train model with best hyperparameters
@@ -457,25 +620,28 @@ def ks_threshold(y_true, y_score):
     opt_threshold = thresholds[np.argmax(tpr - fpr)]
     return opt_threshold
 
-def create_train_test(dataset, final = False, seed = 880, dev_test_size = 0.2):
-    """ Splits a dataset betweeen a train set and development or deployment test.
-    
+
+def create_train_test(dataset, final=False, seed=880, dev_test_size=0.2):
+    """Splits a dataset betweeen a train set and development or deployment test.
+
     Parameters:
     - dataset (DataFrame or array-like): The dataset to be split into train and test sets.
     - final (bool): If True, indicates that the holdout test will be.
                     If False, indicates that the development test will be returned (default: False).
     - seed (int): Seed value for random state for development test (default: 880).
-    - dev_test_size (float): The proportion of the dataset to include in the development 
+    - dev_test_size (float): The proportion of the dataset to include in the development
     test split (default: 0.2).
 
     Returns:
     - Tuple: (train_set, test_set) - The training and testing datasets.
-    
+
     """
-    #Do not change the following parameters neither the value of final to avoid data leakage
+    # Do not change the following parameters neither the value of final to avoid data leakage
     train, holdout = train_test_split(dataset, test_size=0.2, random_state=880)
     if final:
         return train, holdout
     else:
-        dev_train, dev_test = train_test_split(train, test_size=dev_test_size, random_state=seed)
+        dev_train, dev_test = train_test_split(
+            train, test_size=dev_test_size, random_state=seed
+        )
         return dev_train, dev_test

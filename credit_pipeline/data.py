@@ -3,6 +3,16 @@ import pandas as pd
 import credit_pipeline.data_exploration as dex
 
 
+def download_datasets():
+    import gdown
+    """Download data from Google Drive and unzip it in the data folder."""
+    url = "https://drive.google.com/uc?id=1Y7bTNsxDv-te40FnJsoca1YeB4da6TCq"
+    output = "data.zip"
+    gdown.download(url, output, quiet=False)
+    os.system("unzip data.zip -d .")
+    os.system("rm data.zip")
+
+
 def prepare_datasets():
     """
     Function that preprocess the datasets and save them in the data/prepared folder.
@@ -11,7 +21,13 @@ def prepare_datasets():
     os.makedirs("data/prepared", exist_ok=True)
 
     # home credit
-    # TODO
+    df = dex.read_csv_encoded("data/HomeCredit", "application_train.csv")
+    df = df.drop(columns=["SK_ID_CURR", "OCCUPATION_TYPE", "ORGANIZATION_TYPE"])
+    df = df.rename(columns={"TARGET": "DEFAULT"})
+    cat_cols = df.loc[:, df.dtypes == "object"].columns.tolist()
+    for col in cat_cols:
+        df[col] = pd.Categorical(df[col])
+    df.to_csv("data/prepared/homecredit.csv", index=False)
 
     # taiwan
     df = dex.read_csv_encoded("data/Taiwan/", "Taiwan.csv")
@@ -79,9 +95,9 @@ def prepare_datasets():
         "Dependents",
         "Telephone",
         "ForeignWorker",
-        "DEFAULT"
+        "DEFAULT",
     ]
-    df["DEFAULT"] = df.DEFAULT.apply(lambda x : 1 if x == 2 else 0)
+    df["DEFAULT"] = df.DEFAULT.apply(lambda x: 1 if x == 2 else 0)
     df["Gender"] = df.PersonalStatus
     df.CheckingAccount = df.CheckingAccount.apply(
         {"A11": "< 0", "A12": "0 - 200", "A13": "> 200", "A14": "No"}.get
@@ -192,8 +208,9 @@ def load_dataset(dataset_name):
     :param dataset_name: string, name of the dataset
     :return: pandas dataframe
     """
-    if dataset_name == "home_credit":
-        raise NotImplementedError
+    if dataset_name == "homecredit":
+        df = pd.read_csv("../data/prepared/homecredit.csv")
+        cat_cols = df.loc[:, df.dtypes == "object"].columns.tolist()
     elif dataset_name == "taiwan":
         df = pd.read_csv("../data/prepared/taiwan.csv")
         cat_cols = [
@@ -231,4 +248,5 @@ def load_dataset(dataset_name):
 
 
 if __name__ == "__main__":
+    download_datasets()
     prepare_datasets()
