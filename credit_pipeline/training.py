@@ -549,17 +549,23 @@ def optimize_model_fast(
                 values_cp = {n: v for n, v in values.items() if n != "type"}
                 params[name] = trial.suggest_float(name, **values_cp)
 
-        params["random_state"] = seed_number
+        try:
+            params["random_state"] = seed_number
+            model = model_class(**params)
+        except:
+            del params["random_state"]
+            model = model_class(**params)
 
-        if type(score_func) == str and score_func == "roc_auc":
-            score_func = roc_auc_score
-
-        model = model_class(**params)
+        
         model.fit(X_train, y_train, **fit_params)
 
         # Predict and evaluate the model
-        predictions = model.predict_proba(X_val)[:, 1]
-        score = score_func(y_val, predictions)
+        y_val_score = model.predict_proba(X_val)[:, 1]
+        if type(score_func) == str and score_func == "roc_auc":
+            score = roc_auc_score(y_val, y_val_score)
+        else:
+            y_val_pred = y_val_score > ks_threshold(y_val, y_val_score)
+            score = score_func(y_val, y_val_pred, y_val_score)
 
         return score
 
@@ -573,7 +579,7 @@ def optimize_model_fast(
     preprocess = create_pipeline(
         X_train,
         y_train,
-        model_class(),
+        None,
         **pipeline_params,
     )
     preprocess.fit(X_train, y_train)
@@ -604,13 +610,28 @@ def optimize_model_fast(
 
     # Train model with best hyperparameters
     best_params = study.best_params
-    model = create_pipeline(
-        X_train,
-        y_train,
-        model_class(random_state=seed_number, **best_params),
-        **pipeline_params,
-    )
-    model.fit(X_train, y_train)
+    fit_params_pip = fit_params.copy()
+    for key in fit_params.keys():
+        fit_params_pip["classifier__" + key] = fit_params_pip.pop(key)
+    try:
+        best_params["random_state"] = seed_number
+        model = create_pipeline(
+            X_train,
+            y_train,
+            model_class(random_state=seed_number, **best_params),
+            **pipeline_params,
+        )
+        model.fit(X_train, y_train, **fit_params_pip)
+    except:
+        del best_params["random_state"]
+        model = create_pipeline(
+            X_train,
+            y_train,
+            model_class(**best_params),
+            **pipeline_params,
+        )
+        model.fit(X_train, y_train, **fit_params_pip)
+
     return study, model
 
 
