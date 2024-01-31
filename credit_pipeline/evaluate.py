@@ -355,3 +355,101 @@ def get_fairness_metrics(name_model_dict, X, y, z, threshold=0.5, benefit_class=
     metrics = get_metrics_df(models_dict)
     metrics = metrics.reset_index().rename(columns={"index": "model"})
     return metrics
+
+def get_metrics_simple(model_preds_dict, y):
+    """Calculate metrics for a set of models. The metrics are returned in a dataframe. 
+    The input must be a dict with model names, and the values are the model predictions and scores (a tuple).
+
+    Parameters
+    ----------
+    model_preds_dict : dict
+        Dict with model names as keys and tuple with model predictions and scores as values.
+    y : array-like
+        Ground truth labels.
+    """
+
+    def get_metrics_df(
+        models_dict,
+        y_true,
+    ):
+        metrics_score_dict = {
+            "AUC": lambda x: roc_auc_score(y_true, x) if x is not None else None,
+            "Brier Score": lambda x: brier_score_loss(y_true, x) if x is not None else None,
+        }
+        metrics_dict = {
+            "Balanced Accuracy": lambda x: balanced_accuracy_score(y_true, x),
+            "Accuracy": lambda x: accuracy_score(y_true, x), 
+            "Precision": lambda x: precision_score(y_true, x, zero_division=0), 
+            "Recall": lambda x: recall_score(y_true, x), 
+            "F1": lambda x: f1_score(y_true, x), 
+        }
+        df_dict = {}
+        for metric_name, metric_func in metrics_score_dict.items():
+            df_dict[metric_name] = [
+                metric_func(scores) for (_, scores) in models_dict.values()
+            ]
+        for metric_name, metric_func in metrics_dict.items():
+            df_dict[metric_name] = [
+                metric_func(preds) for (preds, _) in models_dict.values()
+            ]
+       
+        return pd.DataFrame.from_dict(
+            df_dict, orient="index", columns=models_dict.keys()
+        ).T
+
+    metrics = get_metrics_df(model_preds_dict, y)
+    metrics = metrics.reset_index().rename(columns={"index": "model"})
+    return metrics
+
+def get_fairness_metrics_simple(model_preds_dict, y, z, benefit_class=1):
+    """Calculate fairness metrics for a set of models. The metrics are returned in a dataframe.
+    The input must be a dict with model names, and the values are the model predictions and scores (a tuple).
+    Fair metrics does not require the scores, so the values can be none.
+
+    Parameters
+    ----------
+    model_preds_dict : dict
+        Dict with model names as keys and tuple with model predictions and scores as values.
+    y : array-like
+        Ground truth labels.
+    z : array-like
+        Protected attribute.
+    benefit_class : int
+        Value that indicates the benefit class.
+
+    Return
+    """
+    models_dict = {}
+    for name, (y_pred, y_score) in model_preds_dict.items():
+        y_pred = (y_pred == benefit_class).astype("float")
+        models_dict[name] = y_pred
+
+    # transform y to array if it is a pandas series
+    if type(y) == pd.Series:
+        y = y.values
+    if type(z) == pd.Series:
+        z = z.values
+    y_true = (y == benefit_class).astype("float")
+
+    def get_metrics_df(models_dict):
+        metrics_dict = {
+            "DPD": lambda x: demographic_parity(y_true, x, z),
+            "EOD": lambda x: equal_opportunity(y_true, x, z),
+            "AOD": lambda x: average_odds(y_true, x, z),
+            "APVD": lambda x: average_precision_value_difference(y_true, x, z),
+            "GMA": lambda x: geometric_mean_accuracy(y_true, x, z),
+            "balanced_accuracy": lambda x: balanced_accuracy_score(y_true, x),
+        }
+
+        df_dict = {}
+        for metric_name, metric_func in metrics_dict.items():
+            df_dict[metric_name] = [
+                metric_func(preds) for preds in models_dict.values()
+            ]
+        return pd.DataFrame.from_dict(
+            df_dict, orient="index", columns=models_dict.keys()
+        ).T
+
+    metrics = get_metrics_df(models_dict)
+    metrics = metrics.reset_index().rename(columns={"index": "model"})
+    return metrics
