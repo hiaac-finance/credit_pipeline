@@ -586,6 +586,10 @@ def optimize_model_fast(
     X_train_preprocessed = preprocess[:-1].transform(X_train)
     X_val_preprocessed = preprocess[:-1].transform(X_val)
 
+    fit_params_wt_pip = fit_params.copy()
+    for key in fit_params.keys():
+        fit_params_wt_pip[key.split("__")[1]] = fit_params_wt_pip.pop(key)
+    
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     sampler = TPESampler(seed=seed_number)
     study = optuna.create_study(direction="maximize", sampler=sampler)
@@ -593,7 +597,7 @@ def optimize_model_fast(
         lambda trial: objective_fast_(
             trial,
             model_class,
-            fit_params,
+            fit_params_wt_pip,
             score_func,
             param_space,
             X_train_preprocessed,
@@ -610,9 +614,6 @@ def optimize_model_fast(
 
     # Train model with best hyperparameters
     best_params = study.best_params
-    fit_params_pip = fit_params.copy()
-    for key in fit_params.keys():
-        fit_params_pip["classifier__" + key] = fit_params_pip.pop(key)
     try:
         best_params["random_state"] = seed_number
         model = create_pipeline(
@@ -621,7 +622,7 @@ def optimize_model_fast(
             model_class(random_state=seed_number, **best_params),
             **pipeline_params,
         )
-        model.fit(X_train, y_train, **fit_params_pip)
+        model.fit(X_train, y_train, **fit_params)
     except:
         del best_params["random_state"]
         model = create_pipeline(
@@ -630,7 +631,7 @@ def optimize_model_fast(
             model_class(**best_params),
             **pipeline_params,
         )
-        model.fit(X_train, y_train, **fit_params_pip)
+        model.fit(X_train, y_train, **fit_params)
 
     return study, model
 
