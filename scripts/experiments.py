@@ -393,7 +393,14 @@ def experiment_fairness(args):
                 Y_train, 
                 sensitive_features=A_train
             )
-            model_dict = {"thr_" + model_class.__name__: [model, None]}
+            class Thr_helper:
+                def __init__(self, model, sensitive_features):
+                    self.model = model
+                    self.sensitive_features = sensitive_features
+                def predict(self, X):
+                    return self.model.predict(X, sensitive_features=self.sensitive_features)
+            thr_opt_helper = Thr_helper(thr_opt, A_test)
+            model_dict = {"thr_" + model_class.__name__: [thr_opt_helper, None]}
             metrics = evaluate.get_metrics(model_dict, X_test_preprocessed, Y_test)
             fairness_metrics = evaluate.get_fairness_metrics(
                 model_dict, X_test_preprocessed, Y_test, A_test
