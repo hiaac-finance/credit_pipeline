@@ -258,17 +258,19 @@ def experiment_fairness(args):
                 Y_train,
                 X_val,
                 Y_val,
-                fit_params={"sample_weight": rw_weights},
+                fit_params={"classifier__sample_weight": rw_weights},
                 score_func=scorer_validation,
                 n_trials=args["n_trials"],
                 timeout=args["timeout"],
             )
-            Y_pred = model.predict_proba(X_train)[:, 1]
-            threshold = training.ks_threshold(Y_train, Y_pred)
-            model_dict = {"rw_" + model_class.__name__: [model, threshold]}
-            metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
-            fairness_metrics = evaluate.get_fairness_metrics(
-                model_dict, X_test, Y_test, A_test
+            Y_train_score = model.predict_proba(X_train)[:, 1]
+            threshold = training.ks_threshold(Y_train, Y_train_score)
+            Y_test_score = model.predict_proba(X_test)[:, 1]
+            Y_test_pred = Y_test_score > threshold
+            model_dict = {"rw_" + model_class.__name__: [Y_test_pred, Y_test_score]}
+            metrics = evaluate.get_metrics_simple(model_dict, Y_test)
+            fairness_metrics = evaluate.get_fairness_metrics_simple(
+                model_dict, Y_test, A_test
             )
 
             joblib.dump(model, f"{path}/{fold}/rw_{model_class.__name__}.pkl")
@@ -287,14 +289,7 @@ def experiment_fairness(args):
 
             print(f"Finished training with ROC {study.best_value:.2f}")
 
-        # class DemographicParityClassifier(fair_models.DemographicParityClassifier):
-        #     def __init__(self, covariance_threshold = 0.1, **kwargs):
-        #         super().__init__(covariance_threshold = covariance_threshold, **kwargs)
-        
-        # class EqualOpportunityClassifier(fair_models.EqualOpportunityClassifier):
-        #     def __init__(self, covariance_threshold=0.1, positive_target=1, **kwargs):
-        #         super().__init__(covariance_threshold=covariance_threshold, positive_target=positive_target, **kwargs)
-
+      
         for model_class in [DemographicParityClassifier, EqualOpportunityClassifier]:
             print("Model: ", model_class.__name__)
             param_space = FAIRNESS_PARAM_SPACES[model_class.__name__]
@@ -318,14 +313,15 @@ def experiment_fairness(args):
                 n_trials=args["n_trials"],
                 timeout=args["timeout"],
             )
-            Y_pred = model.predict_proba(X_train)[:, 1]
-            threshold = training.ks_threshold(Y_train, Y_pred)
-            model_dict = {model_class.__name__: [model, threshold]}
-            metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
-            fairness_metrics = evaluate.get_fairness_metrics(
-                model_dict, X_test, Y_test, A_test
+            Y_train_score = model.predict_proba(X_train)[:, 1]
+            threshold = training.ks_threshold(Y_train, Y_train_score)
+            Y_test_score = model.predict_proba(X_test)[:, 1]
+            Y_test_pred = Y_test_score > threshold
+            model_dict = {"rw_" + model_class.__name__: [Y_test_pred, Y_test_score]}
+            metrics = evaluate.get_metrics_simple(model_dict, Y_test)
+            fairness_metrics = evaluate.get_fairness_metrics_simple(
+                model_dict, Y_test, A_test
             )
-
             joblib.dump(model, f"{path}/{fold}/{model_class.__name__}.pkl")
             joblib.dump(
                 study,
@@ -351,17 +347,19 @@ def experiment_fairness(args):
             Y_train,
             X_val,
             Y_val,
-            fit_params={"constraint_group": A_train},
+            fit_params={"classifier__constraint_group": A_train},
             score_func=scorer_validation,
             n_trials=args["n_trials"],
             timeout=args["timeout"],
         )
-        Y_pred = model.predict_proba(X_train)[:, 1]
-        threshold = training.ks_threshold(Y_train, Y_pred)
-        model_dict = {model_class.__name__: [model, threshold]}
-        metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
-        fairness_metrics = evaluate.get_fairness_metrics(
-            model_dict, X_test, Y_test, A_test
+        Y_train_score = model.predict_proba(X_train)[:, 1]
+        threshold = training.ks_threshold(Y_train, Y_train_score)
+        Y_test_score = model.predict_proba(X_test)[:, 1]
+        Y_test_pred = Y_test_score > threshold
+        model_dict = {"rw_" + model_class.__name__: [Y_test_pred, Y_test_score]}
+        metrics = evaluate.get_metrics_simple(model_dict, Y_test)
+        fairness_metrics = evaluate.get_fairness_metrics_simple(
+            model_dict, Y_test, A_test
         )
 
         joblib.dump(model, f"{path}/{fold}/{model_class.__name__}.pkl")
@@ -380,15 +378,15 @@ def experiment_fairness(args):
 
         print(f"Finished training with ROC {study.best_value:.2f}")
 
-        for model_class in MODEL_CLASS_LIST:
+        for model_class in [LogisticRegression, MLPClassifier, LGBMClassifier]:
             path_ = path
             path_ = path_.replace("fair_models", "credit_models")
             model = joblib.load(f"{path_}/{fold}/{model_class.__name__}.pkl")
-            print(model, type(model))
+            print("Model: ", model_class.__name__)
             model = model.steps[-1][1]
             thr_opt = ThresholdOptimizer(
                 estimator=model,
-                constraints="equalized_odds",
+                constraints="true_positive_rate_parity",
                 objective="balanced_accuracy_score",
                 prefit=True,
                 predict_method="predict_proba",
@@ -397,15 +395,13 @@ def experiment_fairness(args):
                 X_train_preprocessed, 
                 Y_train, 
                 sensitive_features=A_train
+            )             
+            Y_test_pred = thr_opt.predict(X_test_preprocessed, sensitive_features=A_test)
+            model_dict = {"rw_" + model_class.__name__: [Y_test_pred, None]}
+            metrics = evaluate.get_metrics_simple(model_dict, Y_test)
+            fairness_metrics = evaluate.get_fairness_metrics_simple(
+                model_dict, Y_test, A_test
             )
-            Y_pred = thr_opt.predict_proba(X_train_preprocessed)[:, 1]
-            threshold = training.ks_threshold(Y_train, Y_pred)
-            model_dict = {"thr_" + model_class.__name__: [model, threshold]}
-            metrics = evaluate.get_metrics(model_dict, X_test_preprocessed, Y_test)
-            fairness_metrics = evaluate.get_fairness_metrics(
-                model_dict, X_test_preprocessed, Y_test, A_test
-            )
-
             joblib.dump(model, f"{path}/{fold}/thr_{model_class.__name__}.pkl")
             joblib.dump(
                 study,
