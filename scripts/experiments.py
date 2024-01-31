@@ -150,7 +150,7 @@ def experiment_credit_models(args):
                 timeout=args["timeout"],
                 seed_number=args["seed"],
                 pipeline_params={"crit": 4} if args["dataset"] == "homecredit" else {},
-                n_jobs=6,
+                n_jobs=args["n_jobs"],
             )
             Y_pred = model.predict_proba(X_train)[:, 1]
             threshold = training.ks_threshold(Y_train, Y_pred)
@@ -262,15 +262,14 @@ def experiment_fairness(args):
                 score_func=scorer_validation,
                 n_trials=args["n_trials"],
                 timeout=args["timeout"],
+                n_jobs=args["n_jobs"],
             )
             Y_train_score = model.predict_proba(X_train)[:, 1]
             threshold = training.ks_threshold(Y_train, Y_train_score)
-            Y_test_score = model.predict_proba(X_test)[:, 1]
-            Y_test_pred = Y_test_score > threshold
-            model_dict = {"rw_" + model_class.__name__: [Y_test_pred, Y_test_score]}
-            metrics = evaluate.get_metrics_simple(model_dict, Y_test)
-            fairness_metrics = evaluate.get_fairness_metrics_simple(
-                model_dict, Y_test, A_test
+            model_dict = {"rw_" + model_class.__name__: [model, threshold]}
+            metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
+            fairness_metrics = evaluate.get_fairness_metrics(
+                model_dict, X_test, Y_test, A_test
             )
 
             joblib.dump(model, f"{path}/{fold}/rw_{model_class.__name__}.pkl")
@@ -312,15 +311,14 @@ def experiment_fairness(args):
                 score_func=scorer_validation,
                 n_trials=args["n_trials"],
                 timeout=args["timeout"],
+                n_jobs=args["n_jobs"],
             )
             Y_train_score = model.predict_proba(X_train)[:, 1]
             threshold = training.ks_threshold(Y_train, Y_train_score)
-            Y_test_score = model.predict_proba(X_test)[:, 1]
-            Y_test_pred = Y_test_score > threshold
-            model_dict = {"rw_" + model_class.__name__: [Y_test_pred, Y_test_score]}
-            metrics = evaluate.get_metrics_simple(model_dict, Y_test)
-            fairness_metrics = evaluate.get_fairness_metrics_simple(
-                model_dict, Y_test, A_test
+            model_dict = {model_class.__name__: [model, threshold]}
+            metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
+            fairness_metrics = evaluate.get_fairness_metrics(
+                model_dict, X_test, Y_test, A_test
             )
             joblib.dump(model, f"{path}/{fold}/{model_class.__name__}.pkl")
             joblib.dump(
@@ -351,15 +349,14 @@ def experiment_fairness(args):
             score_func=scorer_validation,
             n_trials=args["n_trials"],
             timeout=args["timeout"],
+            n_jobs = args["n_jobs"],
         )
         Y_train_score = model.predict_proba(X_train)[:, 1]
         threshold = training.ks_threshold(Y_train, Y_train_score)
-        Y_test_score = model.predict_proba(X_test)[:, 1]
-        Y_test_pred = Y_test_score > threshold
-        model_dict = {"rw_" + model_class.__name__: [Y_test_pred, Y_test_score]}
-        metrics = evaluate.get_metrics_simple(model_dict, Y_test)
-        fairness_metrics = evaluate.get_fairness_metrics_simple(
-            model_dict, Y_test, A_test
+        model_dict = {model_class.__name__: [model, threshold]}
+        metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
+        fairness_metrics = evaluate.get_fairness_metrics(
+            model_dict, X_test, Y_test, A_test
         )
 
         joblib.dump(model, f"{path}/{fold}/{model_class.__name__}.pkl")
@@ -395,12 +392,11 @@ def experiment_fairness(args):
                 X_train_preprocessed, 
                 Y_train, 
                 sensitive_features=A_train
-            )             
-            Y_test_pred = thr_opt.predict(X_test_preprocessed, sensitive_features=A_test)
-            model_dict = {"rw_" + model_class.__name__: [Y_test_pred, None]}
-            metrics = evaluate.get_metrics_simple(model_dict, Y_test)
-            fairness_metrics = evaluate.get_fairness_metrics_simple(
-                model_dict, Y_test, A_test
+            )
+            model_dict = {"thr_" + model_class.__name__: [model, None]}
+            metrics = evaluate.get_metrics(model_dict, X_test_preprocessed, Y_test)
+            fairness_metrics = evaluate.get_fairness_metrics(
+                model_dict, X_test_preprocessed, Y_test, A_test
             )
             joblib.dump(model, f"{path}/{fold}/thr_{model_class.__name__}.pkl")
             joblib.dump(
@@ -447,6 +443,12 @@ if __name__ == "__main__":
         type=int,
         default=100,
         help="timeout in seconds for the hyperparameter optimization",
+    )
+    parser.add_argument(
+        "--n_jobs",
+        type=int,
+        default=1,
+        help="number of jobs to run in parallel for the hyperparameter optimization",
     )
 
     args = vars(parser.parse_args())
