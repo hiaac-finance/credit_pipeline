@@ -5,12 +5,9 @@ import matplotlib.pyplot as plt
 from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder
 from scipy.cluster.hierarchy import linkage, dendrogram
-from fitter import Fitter, get_common_distributions
 from scipy import stats
-import dash_bio
 import chardet
 import os
-import inspect
 
 
 def read_csv_encoded(path, filename):
@@ -1086,6 +1083,7 @@ def fit_continuous_distributions(
     Note:
         Ensure that both the `pandas` library and `fitter` package are installed before using this function.
     """
+    from fitter import Fitter, get_common_distributions
     contin_cols = list_contin_cols(dataframe)
     if isinstance(list_columns, list):
         columns = list_columns
@@ -1156,6 +1154,7 @@ def fit_one_continuous_distribution(dataframe, column):
     Note:
         Ensure that both the `pandas` library, `fitter` package, and `seaborn` are installed before using this function.
     """
+    from fitter import Fitter, get_common_distributions
     # Set figsize to standard
     sns.set(rc={"figure.figsize": (8, 6)})
 
@@ -1214,9 +1213,6 @@ def plot_columns_dendrogram(
     Note:
         Ensure that both the `pandas` library, `scipy.cluster.hierarchy` and `matplotlib.pyplot` are installed before using this function.
     """
-    import pandas as pd
-    import matplotlib.pyplot as plt
-    from scipy.cluster.hierarchy import linkage, dendrogram
 
     # ... [rest of the function code]
 
@@ -1448,6 +1444,7 @@ def plot_corr_clustergram(
     :param bool hide_labels: if should hid labels, defaults to True
     :return: graph object
     """
+    import dash_bio
     notnan = ~dataframe.isna().any()
     dataframe_ = dataframe.loc[notnan, notnan]
     
