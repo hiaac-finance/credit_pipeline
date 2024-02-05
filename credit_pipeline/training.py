@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import StandardScaler
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer, make_column_selector
 from sklearn.pipeline import Pipeline
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -65,6 +65,59 @@ hyperparam_spaces = {
     },
 }
 
+class EBE(BaseEstimator, TransformerMixin, ):
+    def __init__(self, k=1):
+        self.k = k
+
+    def fit(self, X, y):
+        self.feature_names_in_ = []
+        self.n_features, self.n_items  = X.shape[1], X.shape[0]
+        self._aux_dict_main = {}
+        self.mean = {}
+        self.unique_values = {col: X[col].unique() for col in X.columns}
+        for i in range(self.n_features):
+            Xi = X.iloc[:,i]
+            X_name = X.iloc[:,i].name
+
+            y = pd.Series(y, index = X.index)
+            aux_dict = (pd.Series(y)
+                        .groupby(Xi)
+                        .agg(["mean", "count"])
+                        .to_dict())
+            self._aux_dict_main[X_name] = aux_dict
+            self.feature_names_in_.append(X_name)
+            self.mean[X_name] = y.mean()
+        return self
+
+    def transform(self, X, y=None):
+        Xt_list = []
+        for i in range(self.n_features):
+                Xi = X.iloc[:,i]
+                X_name = X.iloc[:,i].name
+                X_copy = Xi.copy()
+                mean = self._aux_dict_main[X_name]['mean']
+                count = self._aux_dict_main[X_name]['count']
+
+                mode = pd.Series(mean.values()).mode()[0]
+                fit_unique = set(self.unique_values[X_name])
+                X_unique = set(Xi.unique())
+                unknown_values = list(X_unique - fit_unique)
+                X_copy = X_copy.replace(unknown_values, mode)
+
+                group_ave = X_copy.replace(mean)
+                group_count = X_copy.replace(count)
+
+
+                Xt = ((group_ave * group_count + self.k * self.mean[X_name]) / (self.k + group_count)).values.reshape(-1, 1)
+                Xt_list.append(Xt)
+        Xt_array = np.hstack(Xt_list)
+        return Xt_array
+
+    def get_feature_names_out(self, input_features=None):
+        if isinstance(input_features, pd.DataFrame):
+            return [col for col in input_features.columns]
+        else:
+            return [col for col in input_features]
 
 class EBE(
     BaseEstimator,
@@ -158,6 +211,9 @@ def create_pipeline(
     do_EBE=False,
     crit=3,
 ):
+    # def create_pipeline(X, y, classifier = None, onehot = True, onehotdrop = False,
+    #                 normalize = True, do_EBE = False, crit = 3, identify_columns = True,
+    #                 num_cols = [], cat_cols = [], ebe_cols = []):
     if cat_cols == "infer":
         num_cols = [
             col for col in X.columns if X[col].dtype.kind in ["b", "i", "u", "f", "c"]
@@ -170,18 +226,6 @@ def create_pipeline(
         ebe_cols = [col for col in cat_cols if X[col].nunique() >= crit if do_EBE]
         cat_cols = [item for item in cat_cols if item not in ebe_cols]
 
-
-    # check if need EBE
-    if do_EBE:
-        do_ebe_cols = []
-        dont_ebe_cols = []
-        for c in cat_cols:
-            if len(X[c].unique()) >= crit:
-                do_ebe_cols.append(c)
-            else:
-                dont_ebe_cols.append(c)
-    else:
-        do_ebe_cols, dont_ebe_cols = [], cat_cols
 
     # 1 Fill NaNs
     numeric_nan_fill_transformer = Pipeline(
@@ -200,7 +244,7 @@ def create_pipeline(
     )
     fill_pipe.set_output(transform="pandas")
 
-    # 2: Ordinal encoder
+    #2: Ordinal encoder
     encoder_pipe = ColumnTransformer(
         transformers=[
             ("num", "passthrough", num_cols),
