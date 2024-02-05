@@ -13,7 +13,7 @@ with open('HISTORY.rst') as history_file:
 requirements = [ 
     "pandas<2.1.0",
     "numpy",
-    "scikit-learn",
+    "scikit-learn>1.2.2",
     "tensorflow",
     "matplotlib",
     "seaborn",

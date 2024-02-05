@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import joblib
+from scipy import stats
 from sklearn.ensemble import IsolationForest
 
 from sklearn.model_selection import train_test_split
@@ -376,42 +377,50 @@ def expand_dataset(X_train, y_train, X_unl,
         # Retrieve the samples marked as non-outliers for training
         unl_scores = iso.predict(X_unl)
         X_retrieved = X_unl[unl_scores == 1]
-        y_retrieved = pd.Series([])
-        if X_retrieved.shape[0] < 1:
-            return X_retrieved.iloc[[]], y_retrieved.iloc[[]]
+        n_non_out = X_retrieved.shape[0]
+        # print(n_non_out/X_unl.shape[0])
+
+        if n_non_out < 1:
+            return X_retrieved.iloc[[]], pd.Series([]), False
         # Label the non-outliers based on the train set
         y_ret_prob = rotulator.predict_proba(X_retrieved)[:, 1]
-        y_retrieved = (y_ret_prob >= 0.5).astype('int')
-        y_retrieved = pd.Series(y_retrieved, index=X_retrieved.index)
+        y_labels = pd.Series((y_ret_prob >= 0.5).astype('int'), index=X_retrieved.index)
+        y_retrieved = pd.Series(y_ret_prob, index=X_retrieved.index)
+        
+        # y_aux = np.full(n_non_out, number)
+        # y_retrieved = y_retrieved[y_retrieved == y_aux]
 
-        # Return empty dataframes if size is 0
-        if size == 0:
-            return X_retrieved.iloc[[]], y_retrieved.iloc[[]]
+        # # Return empty dataframes if size is 0
+        # if size == 0:
+        #     return X_retrieved.iloc[[]], y_retrieved.iloc[[]]    
 
         # Only add the most confident predictions to the new training set
-        size = size if size < len(y_ret_prob) else int(len(y_ret_prob)/2)
+        size = size if size < len(y_retrieved) else int(len(y_retrieved)/2)
+
         if number == 0:
             # Get indices of lowest probabilities of defaulting
-            confident_indices = np.argpartition(y_ret_prob, size)[:size]
+            confident_indices = np.argpartition(y_retrieved, size)[:size]
 
         elif number == 1:
-            # Get indices of highest probabilities of defaulting
-            confident_indices = np.argpartition(y_ret_prob, -1*size)[-1*size:]
-
+           # Get indices of highest probabilities of defaulting
+            confident_indices = np.argpartition(y_retrieved, -1*size)[-1*size:]
+ 
         X_retrieved = X_retrieved.iloc[confident_indices]
-        y_retrieved = y_retrieved.iloc[confident_indices]
+        y_labels = y_labels.iloc[confident_indices]
 
-        # print(f'size_{number} = {size}')
+        X_retrieved = X_retrieved[y_labels == number]
+        y_retrieved = y_labels[y_labels == number]
+        # print(y_retrieved.shape[0])
 
-        return X_retrieved, y_retrieved
+        return X_retrieved, y_retrieved, True
 
     #y_train.mean()
     c_0 = int(size-size*p) #number of negative (0) samples to add
     c_1 = int(size*p)      #number of positive (1) samples to add
 
-    X_retrieved_0, y_retrieved_0 = retrieve_confident_samples(0, c_0)
-    X_retrieved_1, y_retrieved_1 = retrieve_confident_samples(1, c_1)
-
+    X_retrieved_0, y_retrieved_0, flag_0 = retrieve_confident_samples(0, c_0)
+    X_retrieved_1, y_retrieved_1, flag_1  = retrieve_confident_samples(1, c_1)
+    # print(X_retrieved_1)
     #---------------------------------------------------------------------------
 
     intersection = X_retrieved_0.index.intersection(X_retrieved_1.index)
@@ -424,12 +433,14 @@ def expand_dataset(X_train, y_train, X_unl,
 
     # Concat the datasets
     X_retrieved = pd.concat([X_retrieved_0, X_retrieved_1])
+ 
     y_retrieved = pd.concat([y_retrieved_0, y_retrieved_1])
-    if (y_retrieved.mean() > p + 0.03) or (y_retrieved.mean() < p - 0.03):
-        print(y_retrieved.mean())
-        flag = False
-    else:
-        flag = True
+   
+    # if (y_retrieved.mean() > p + 0.3) or (y_retrieved.mean() < p - 0.3):
+    #     # print(f'y retrieved mean: {y_retrieved.mean()}')
+    #     flag = True
+    # else:
+    #     flag = True
 
     # Keep the samples marked as outliers in the unlabeled/rejected set
     X_kept = X_unl.loc[~X_unl.index.isin(X_retrieved.index)]
@@ -437,12 +448,14 @@ def expand_dataset(X_train, y_train, X_unl,
     #---------------------------------------------------------------------------
     # Add the retrieved samples to the new training dataset
     X_train_updated = pd.concat([X_train, X_retrieved])
+
     y_train_updated = pd.concat([y_train, y_retrieved])
+   
     # print('y_train:', y_train.mean(), 'y_retrieved:', y_retrieved.mean(), 'y_train_updated:', y_train_updated.mean())
     y_train_updated = pd.Series(y_train_updated, index=X_train_updated.index)
 
+    flag = flag_0 and flag_1    
     # dex.get_shapes(X_train_updated, y_train_updated, X_kept, y_kept)
-
     # Return the fitted classifier, updated training and unlabeled sets
     return X_train_updated, y_train_updated, X_kept, flag
 
@@ -455,6 +468,7 @@ def create_datasets_with_ri(X_train, y_train, X_unl,
                                 rot_params = params_dict['LightGBM_2'],
                                 seed = 880,
                                 verbose = True,
+                                technique = 'extrapolation',
                                ):
 
     X_train_list = [X_train]
@@ -468,12 +482,20 @@ def create_datasets_with_ri(X_train, y_train, X_unl,
     for i in range(iterations):
         if verbose:
             print("Iteration: ", i)
-        updated_X_train, updated_y_train, updated_X_unl, flag = expand_dataset(
-                                            updated_X_train, updated_y_train, updated_X_unl, 
-                                            contamination_threshold, size, p, 
-                                            rot_class, rot_params, seed,
-                                            )
+        if technique == 'extrapolation':
+            updated_X_train, updated_y_train, updated_X_unl, flag = expand_dataset(
+                                                updated_X_train, updated_y_train, updated_X_unl, 
+                                                contamination_threshold, size, p, 
+                                                rot_class, rot_params, seed,
+                                                )
+        elif technique == 'LS':
+            updated_X_train, updated_y_train, updated_X_unl, flag = expand_dataset_with_LS(
+                                                updated_X_train, updated_y_train, updated_X_unl, 
+                                                contamination_threshold, size, p, 
+                                                rot_class, rot_params, seed,
+                                                )
         if flag == False:
+            print(i, updated_y_train.shape)
             break
         X_train_list.append(updated_X_train)
         y_train_list.append(updated_y_train)
@@ -498,7 +520,8 @@ def trusted_non_outliers(X_train, y_train, X_unl,
                                 seed= 880,
                                 verbose = False,
                                 output = -1,
-                                save_log = True
+                                save_log = True,
+                                technique = 'extrapolation',
                                 ):
     """_summary_
 
@@ -548,7 +571,8 @@ def trusted_non_outliers(X_train, y_train, X_unl,
                                 rot_class,
                                 rot_params,
                                 seed,
-                                verbose)
+                                verbose,
+                                technique)
     dict_clfs = {}
     sus_iters = len(datasets["X"])
     for i in range(sus_iters):
@@ -563,14 +587,16 @@ def trusted_non_outliers(X_train, y_train, X_unl,
         else:
             dict_clfs['TN_'+str(i)] = trusted_clf
 
-    metrics_value = get_metrics_RI(dict_clfs, X_val, y_val, X_unl=X_unl, threshold_type='none')
+    if output != -1:
+        metrics_value = get_metrics_RI(dict_clfs, X_val, y_val, X_unl=X_unl, threshold_type='none')
 
-    values = metrics_value.loc[["Overall AUC", "KS", "Kickout"]].T.to_numpy()
-    weights = [1,1,1]
-    criterias = np.array([True, True, True])
-    t = top.Topsis(values, weights, criterias)
-    t.calc()
-    output = t.rank_to_best_similarity()[0] - 1
+        values = metrics_value.loc[["Overall AUC", "KS", "Kickout"]].T.to_numpy()
+        weights = [1,1,1]
+        criterias = np.array([True, True, True])
+        t = top.Topsis(values, weights, criterias)
+        t.calc()
+        output = t.rank_to_best_similarity()[0] - 1
+        print(f'best iteration: {output}')
 
 
     if save_log == True:
@@ -855,7 +881,7 @@ def parcelling(X_train, y_train, X_unl, n_scores_interv = 100, prejudice = 3, se
     return {'PAR': parcelling_classifier}
 
 
-def label_spreading(X_train, y_train, X_unl, seed = seed_number):
+def label_spreading(X_train, y_train, X_unl, return_labels = False, seed = seed_number):
     """[Label Spreading] (Zhou, 2004)(Kang, 2021)
 
     Parameters
@@ -884,16 +910,194 @@ def label_spreading(X_train, y_train, X_unl, seed = seed_number):
     #--------------Predict labels on the unlabeled data---------------
     lp_model = tr.create_pipeline(X_combined, y_combined, LabelSpreading(**params_dict['LabelSpreading_2']))
     lp_model.fit(X_combined, y_combined)
-    predicted_labels = lp_model['classifier'].transduction_[indices[n_labeled_points:]]
-
+    predicted_labels = lp_model['classifier'].transduction_[y_combined == -1]
+    
     y_label_pred_s = pd.Series(predicted_labels, index=X_unl_ls.index)
 
     #--------------Fit classifier---------------
     #Create a new classifier pipeline using labeled and unlabeled data, and fit it
-    new_X_train = pd.concat([X_train, X_unl_ls])
-    new_y_train = pd.concat([y_train, y_label_pred_s])
+    new_X_train = pd.concat([X_train_ls, X_unl_ls])
+    new_y_train = pd.concat([y_train_ls, y_label_pred_s])
 
     clf_LS = tr.create_pipeline(new_X_train, new_y_train, LGBMClassifier(**params_dict['LightGBM_2']))
     clf_LS.fit(new_X_train, new_y_train,)
 
+    if return_labels:
+        return lp_model['classifier'].label_distributions_[y_combined == -1]
+    
     return {'LSP': clf_LS}
+
+
+
+def expand_dataset_with_LS(X_train, y_train, X_unl, 
+                        contamination_threshold = 0.1,
+                        size = 1000,
+                        p = 0.07,
+                        rot_class = LGBMClassifier,
+                        rot_params = params_dict['LightGBM_2'],
+                        seed = 880
+                        ):
+    
+    if X_unl.shape[0] < 1:
+        return X_train, y_train, X_unl
+
+    iso_params = {"contamination":contamination_threshold, "random_state":seed}
+    
+    def retrieve_confident_samples(number, size):
+        # Fits outlier detection based on bad payers on the train set
+        iso = tr.create_pipeline(X_train[y_train == number], y_train[y_train == number],
+                                                IsolationForest(**iso_params), do_EBE=True, crit = 0)
+        iso.fit(X_train[y_train == number], y_train[y_train == number])
+        # Retrieve the samples marked as non-outliers for training
+        unl_scores = iso.predict(X_unl)
+        X_retrieved = X_unl[unl_scores == 1]
+        n_non_out = X_retrieved.shape[0]
+        # print(X_retrieved.shape[0])
+        
+        if n_non_out < 1000:
+            return X_retrieved.iloc[[]], pd.Series([]), False
+        # Label the non-outliers based on the train set
+        y_from_ls = label_spreading(X_train, 
+                            y_train, X_retrieved, return_labels=True, seed=seed)
+        y_ret_prob = pd.Series(y_from_ls[:,1],
+                            index=X_retrieved.index)
+        # if entropy:
+        #     y_ret_prob = pd.Series(
+        #         stats.distributions.entropy(y_from_ls.T),
+        #                     index=X_retrieved.index)
+        y_retrieved = pd.Series(np.array([number]*X_retrieved.shape[0]), index=X_retrieved.index)
+        # y_retrieved = pd.Series(y_labels, index=X_retrieved.index)
+        
+        # Only add the most confident predictions to the new training set
+        size = size if size < len(y_retrieved) else int(len(y_retrieved)/2)
+
+        if number == 0:
+            # Get indices of lowest probabilities of defaulting
+            confident_indices = np.argpartition(y_ret_prob, size)[:size]
+
+        elif number == 1:
+           # Get indices of highest probabilities of defaulting
+            confident_indices = np.argpartition(y_ret_prob, -1*size)[-1*size:]
+ 
+        X_retrieved = X_retrieved.iloc[confident_indices]
+        y_retrieved = y_retrieved.iloc[confident_indices]
+
+        return X_retrieved, y_retrieved, True
+    
+        # Only add the most confident predictions to the new training set
+
+
+
+    c_0 = int(size-size*p) #number of negative (0) samples to add
+    c_1 = int(size*p)      #number of positive (1) samples to add
+
+    X_retrieved_0, y_retrieved_0, flag_0 = retrieve_confident_samples(0, c_0)
+    X_retrieved_1, y_retrieved_1, flag_1  = retrieve_confident_samples(1, c_1)
+    #---------------------------------------------------------------------------
+
+    intersection = X_retrieved_0.index.intersection(X_retrieved_1.index)
+    if len(intersection) > 0:
+        X_retrieved_0 = X_retrieved_0.drop(intersection)
+        y_retrieved_0 = y_retrieved_0.drop(intersection)
+
+    #---------------------------------------------------------------------------
+
+    # Concat the datasets
+    X_retrieved = pd.concat([X_retrieved_0, X_retrieved_1])
+ 
+    y_retrieved = pd.concat([y_retrieved_0, y_retrieved_1])
+
+    # Keep the samples marked as outliers in the unlabeled/rejected set
+    X_kept = X_unl.loc[~X_unl.index.isin(X_retrieved.index)]
+
+    #---------------------------------------------------------------------------
+    # Add the retrieved samples to the new training dataset
+    X_train_updated = pd.concat([X_train, X_retrieved])
+
+    y_train_updated = pd.concat([y_train, y_retrieved])
+   
+    y_train_updated = pd.Series(y_train_updated, index=X_train_updated.index)
+
+    flag = flag_0 and flag_1    
+    # Return the fitted classifier, updated training and unlabeled sets
+    return X_train_updated, y_train_updated, X_kept, flag
+
+
+#  def retrieve_confident_samples(number, size):
+#         # Fits outlier detection based on bad payers on the train set
+#         iso = tr.create_pipeline(X_train[y_train == number], y_train[y_train == number],
+#                                                 IsolationForest(**iso_params), do_EBE=True, crit = 0)
+#         iso.fit(X_train[y_train == number], y_train[y_train == number])
+#         # Retrieve the samples marked as non-outliers for training
+#         unl_scores = iso.predict(X_unl)
+#         X_retrieved = X_unl[unl_scores == 1]
+#         n_non_out = X_retrieved.shape[0]
+#         # print(X_retrieved.shape[0])
+        
+#         if n_non_out < 1000:
+#             return X_retrieved.iloc[[]], pd.Series([]), False
+#         # Label the non-outliers based on the train set
+#         y_from_ls = label_spreading(X_train, 
+#                             y_train, X_retrieved, return_labels=True, seed=seed)
+#         y_ret_prob = pd.Series(y_from_ls[:,1],
+#                             index=X_retrieved.index)
+#         if entropy:
+#             y_ret_prob = pd.Series(
+#                 stats.distributions.entropy(y_from_ls.T),
+#                             index=X_retrieved.index)
+#         y_retrieved = pd.Series(np.array([number]*X_retrieved.shape[0]), index=X_retrieved.index)
+#         # y_retrieved = pd.Series(y_labels, index=X_retrieved.index)
+        
+#         # Only add the most confident predictions to the new training set
+#         size = size if size < len(y_retrieved) else int(len(y_retrieved)/2)
+
+#         if number == 0:
+#             # Get indices of lowest probabilities of defaulting
+#             confident_indices = np.argpartition(y_ret_prob, size)[:size]
+
+#         elif number == 1:
+#            # Get indices of highest probabilities of defaulting
+#             confident_indices = np.argpartition(y_ret_prob, -1*size)[-1*size:]
+ 
+#         X_retrieved = X_retrieved.iloc[confident_indices]
+#         y_retrieved = y_retrieved.iloc[confident_indices]
+
+#         return X_retrieved, y_retrieved, True
+    
+#         # Only add the most confident predictions to the new training set
+
+
+
+#     c_0 = int(size-size*p) #number of negative (0) samples to add
+#     c_1 = int(size*p)      #number of positive (1) samples to add
+
+#     X_retrieved_0, y_retrieved_0, flag_0 = retrieve_confident_samples(0, c_0)
+#     X_retrieved_1, y_retrieved_1, flag_1  = retrieve_confident_samples(1, c_1)
+#     #---------------------------------------------------------------------------
+
+#     intersection = X_retrieved_0.index.intersection(X_retrieved_1.index)
+#     if len(intersection) > 0:
+#         X_retrieved_0 = X_retrieved_0.drop(intersection)
+#         y_retrieved_0 = y_retrieved_0.drop(intersection)
+
+#     #---------------------------------------------------------------------------
+
+#     # Concat the datasets
+#     X_retrieved = pd.concat([X_retrieved_0, X_retrieved_1])
+ 
+#     y_retrieved = pd.concat([y_retrieved_0, y_retrieved_1])
+
+#     # Keep the samples marked as outliers in the unlabeled/rejected set
+#     X_kept = X_unl.loc[~X_unl.index.isin(X_retrieved.index)]
+
+#     #---------------------------------------------------------------------------
+#     # Add the retrieved samples to the new training dataset
+#     X_train_updated = pd.concat([X_train, X_retrieved])
+
+#     y_train_updated = pd.concat([y_train, y_retrieved])
+   
+#     y_train_updated = pd.Series(y_train_updated, index=X_train_updated.index)
+
+#     flag = flag_0 and flag_1    
+#     # Return the fitted classifier, updated training and unlabeled sets
+#     return X_train_updated, y_train_updated, X_kept, flag

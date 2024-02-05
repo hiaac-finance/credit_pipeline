@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import StandardScaler
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer, make_column_selector
 from sklearn.pipeline import Pipeline
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -60,15 +60,8 @@ hyperparam_spaces = {
             "type": "categorical",
         },
         "learning_rate_init": {"low": 0.001, "high": 0.1, "type": "float", "log": True},
-        "learning_rate_decay_rate": {
-            "low": 0.1,
-            "high": 1,
-            "type": "float",
-        },
-        "alpha": {"low": 1e-3, "high": 1e3, "type": "float", "log": True},
-        "epochs": {"low": 10, "high": 100, "type": "int", "step": 10},
-        "class_weight": {"choices": [None, "balanced"], "type": "categorical"},
-        "batch_size" : {"low" : 128, "high" : 128, "type" : "int"}
+        "early_stopping": {"choices": [True], "type": "categorical"},
+        "max_iter": {"choices": [50], "type": "categorical"},
     },
 }
 
@@ -165,6 +158,9 @@ def create_pipeline(
     do_EBE=True,
     crit=3,
 ):
+    # def create_pipeline(X, y, classifier = None, onehot = True, onehotdrop = False,
+    #                 normalize = True, do_EBE = False, crit = 3, identify_columns = True,
+    #                 num_cols = [], cat_cols = [], ebe_cols = []):
     if cat_cols == "infer":
         num_cols = [
             col for col in X.columns if X[col].dtype.kind in ["b", "i", "u", "f", "c"]
@@ -206,7 +202,7 @@ def create_pipeline(
     )
     fill_pipe.set_output(transform="pandas")
 
-    # 2: Ordinal encoder
+    #2: Ordinal encoder
     encoder_pipe = ColumnTransformer(
         transformers=[
             ("num", "passthrough", num_cols),
