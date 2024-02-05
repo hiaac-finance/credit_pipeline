@@ -1,468 +1,506 @@
-import argparse
-import joblib
-import numpy as np
-import pandas as pd
-from pathlib import Path
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-from lightgbm import LGBMClassifier
-from aif360.datasets import BinaryLabelDataset
-from aif360.algorithms.preprocessing import Reweighing
-from fairgbm import FairGBMClassifier
-from sklego.linear_model import DemographicParityClassifier, EqualOpportunityClassifier
-from fairlearn.postprocessing import ThresholdOptimizer
-from sklearn.model_selection import train_test_split, KFold
-from credit_pipeline import data, training, evaluate
-from credit_pipeline.models import MLPClassifier
+11.88
+internal_count=39073 2018 37055 1759 36531
+is_linear=0
+shrinkage=0.137383
 
 
-import warnings
-
-warnings.filterwarnings("ignore")
-
-MODEL_CLASS_LIST = [
-    LogisticRegression,
-    MLPClassifier,
-    RandomForestClassifier,
-    LGBMClassifier,
-]
-
-PROTECTED_ATTRIBUTES = {
-    "german": "Gender",
-    "taiwan": "SEX",
-    "homecredit": "CODE_GENDER",
-}
-
-HOMECREDIT_PARAM_SPACE = training.hyperparam_spaces.copy()
-HOMECREDIT_PARAM_SPACE["LogisticRegression"]["solver"] = {
-    "choices": ["saga"],
-    "type": "categorical",
-}
-HOMECREDIT_PARAM_SPACE["LogisticRegression"]["max_iter"] = {
-    "low": 100,
-    "high": 100,
-    "step": 1,
-    "type": "int",
-}
+Tree=399
+num_leaves=5
+num_cat=0
+split_feature=1 1 1 0
+split_gain=0.29542 0.967057 1.00849 0.067121
+threshold=0.85970965606184446 0.48577776198034034 -0.13719439465147187 0.7237315804793828
+decision_type=2 2 2 2
+left_child=1 2 -1 -3
+right_child=-2 3 -4 -5
+leaf_value=0.00012028505644625383 -0.018954323195103498 0.018842619221647081 -0.021979387321391968 0.031987307091913823
+leaf_weight=3495.1405569064864 15.44909363624174 16.300811668101236 39.407448478107654 13.381261720787732
+leaf_count=35842 1347 446 1213 225
+internal_value=0 8.12518e-05 -0.000126143 0.0247733
+internal_weight=0 3564.23 3534.55 29.6821
+internal_count=39073 37726 37055 671
+is_linear=0
+shrinkage=0.137383
 
 
-FAIRNESS_PARAM_SPACES = {}
-FAIRNESS_PARAM_SPACES["FairGBMClassifier"] = training.hyperparam_spaces[
-    "LGBMClassifier"
-].copy()
-FAIRNESS_PARAM_SPACES["FairGBMClassifier"]["multiplier_learning_rate"] = {
-    "low": 0.01,
-    "high": 1,
-    "type": "float",
-}
-del FAIRNESS_PARAM_SPACES["FairGBMClassifier"]["class_weight"]
-FAIRNESS_PARAM_SPACES["EqualOpportunityClassifier"] = {
-    "covariance_threshold": {"low": 0, "high": 1, "type": "float"},
-    "max_iter": {"choices": [1000], "type": "categorical"},
-    "C": {"low": 0.01, "high": 100, "type": "float"},
-}
-FAIRNESS_PARAM_SPACES["DemographicParityClassifier"] = FAIRNESS_PARAM_SPACES[
-    "EqualOpportunityClassifier"
-].copy()
-FAIRNESS_GOAL = {
-    "german" : 0.1,
-    "taiwan" : 0.1,
-    "homecredit" : 0.1
-}
+Tree=400
+num_leaves=6
+num_cat=0
+split_feature=1 1 1 1 34
+split_gain=0.330185 1.33915 1.166 0.460938 0.356762
+threshold=0.5269805176504484 0.26686279291998 0.80823998422475885 0.44964091889262275 1.0000000180025095e-35
+decision_type=2 2 2 2 2
+left_child=1 4 -2 -3 -1
+right_child=2 3 -4 -5 -6
+leaf_value=-0.00027051691798234454 -0.037162173332415567 0.03458449139768844 0.011418911529603244 0.0033566491676999236 0.016552497289807077
+leaf_weight=3477.8458843470107 18.634258983656764 28.26000798172754 18.655065250117332 13.037515382049603 23.950928155798465
+leaf_count=35934 305 548 1656 150 480
+internal_value=0 0.000134641 -0.01286 0.0247277 -0.000155428
+internal_weight=0 3543.09 37.2893 41.2975 3501.8
+internal_count=39073 37112 1961 698 36414
+is_linear=0
+shrinkage=0.137383
 
 
-def load_split(dataset_name, fold, seed=0):
-    """Function that loads the dataset and splits it into train and test. Following, splits the train set into train and validation using 10-fold cross validation.
-
-    Parameters
-    ----------
-        dataset_name : string
-            Name of the dataset in ["german", "taiwan", "homecredit"]
-        fold : int
-            Fold number in the 10-fold cross validation
-        seed : int, optional
-            Random seed. Defaults to 0.
-
-    Returns
-    -------
-        pandas.DataFrame: train, validation and test sets
-    """
-    df = data.load_dataset(dataset_name)
-    train, test = training.create_train_test(df, final=False, seed=seed)
-    X_train_ = train.drop(columns=["DEFAULT"])
-    Y_train_ = train["DEFAULT"]
-    X_test = test.drop(columns=["DEFAULT"])
-    Y_test = test["DEFAULT"]
-    kf = KFold(n_splits=10, shuffle=True, random_state=seed)
-    for i, (train_index, val_index) in enumerate(kf.split(X_train_)):
-        if i == fold:
-            X_train = X_train_.iloc[train_index]
-            Y_train = Y_train_.iloc[train_index]
-            X_val = X_train_.iloc[val_index]
-            Y_val = Y_train_.iloc[val_index]
-            break
-    return X_train, Y_train, X_val, Y_val, X_test, Y_test
+Tree=401
+num_leaves=4
+num_cat=0
+split_feature=1 1 1
+split_gain=0.262707 0.994429 1.31202
+threshold=0.85970965606184446 0.53549125078886406 0.44964091889262275
+decision_type=2 2 2
+left_child=1 2 -1
+right_child=-2 -3 -4
+leaf_value=0.00010605699499361111 -0.017826397122316286 0.033356125441487278 -0.037390948925451369
+leaf_weight=3530.096188577385 15.530903557810232 16.861775727418717 17.695183346659178
+leaf_count=36962 1347 523 241
+internal_value=0 7.7195e-05 -8.10227e-05
+internal_weight=0 3564.65 3547.79
+internal_count=39073 37726 37203
+is_linear=0
+shrinkage=0.137383
 
 
-def experiment_credit_models(args):
-    """Function that run experiments from Section 2.4 of the paper.
-    It will fit Logistic, MLP, Random Forest and LightGBM models to any of the datasets in the data folder.
-    It will save the models and the metrics in the results folder.
-
-    Parameters
-    ----------
-        args (dict): arguments for the experiment
-    """
-    path = f"../results/credit_models/{args['dataset']}"
-
-    for fold in range(10):
-        Path(f"{path}/{fold}").mkdir(parents=True, exist_ok=True)
-        print("Fold: ", fold)
-        X_train, Y_train, X_val, Y_val, X_test, Y_test = load_split(
-            args["dataset"], fold, args["seed"]
-        )
-        # Workaround to obtain the protected attribute as a binary column
-        if args["dataset"] == "homecredit":  # Small fix to not apply EBE to gender
-            pipeline_preprocess = training.create_pipeline(X_train, Y_train, crit=4)
-        else:
-            pipeline_preprocess = training.create_pipeline(X_train, Y_train)
-        pipeline_preprocess.fit(X_train, Y_train)
-        X_train_preprocessed = pipeline_preprocess.transform(X_train)
-        A_train = X_train_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
-        X_test_preprocessed = pipeline_preprocess.transform(X_test)
-        A_test = X_test_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
-        del X_train_preprocessed, X_test_preprocessed, pipeline_preprocess
-
-        for model_class in MODEL_CLASS_LIST:
-            print("Model: ", model_class.__name__)
-            param_space = "suggest"
-            if args["dataset"] == "homecredit":
-                param_space = HOMECREDIT_PARAM_SPACE[model_class.__name__]
-
-            study, model = training.optimize_model_fast(
-                model_class,
-                param_space,
-                X_train,
-                Y_train,
-                X_val,
-                Y_val,
-                n_trials=args["n_trials"],
-                timeout=args["timeout"],
-                seed_number=args["seed"],
-                pipeline_params={"crit": 4} if args["dataset"] == "homecredit" else {},
-                n_jobs=args["n_jobs"],
-            )
-            Y_pred = model.predict_proba(X_train)[:, 1]
-            threshold = training.ks_threshold(Y_train, Y_pred)
-            model_dict = {model_class.__name__: [model, threshold]}
-            metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
-            fairness_metrics = evaluate.get_fairness_metrics(
-                model_dict, X_test, Y_test, A_test
-            )
-
-            # save results
-            print(f"Finished training with ROC {study.best_value:.2f}")
-            joblib.dump(model, f"{path}/{fold}/{model_class.__name__}.pkl")
-            joblib.dump(
-                study,
-                f"{path}/{fold}/{model_class.__name__}_study.pkl",
-            )
-            metrics.to_csv(
-                f"{path}/{fold}/{model_class.__name__}_metrics.csv",
-                index=False,
-            )
-            fairness_metrics.to_csv(
-                f"{path}/{fold}/{model_class.__name__}_fairness_metrics.csv",
-                index=False,
-            )
-
-    metrics = [
-        pd.read_csv(f"{path}/{fold}/{model_class.__name__}_metrics.csv")
-        for fold in range(10)
-        for model_class in MODEL_CLASS_LIST
-    ]
-    metrics = pd.concat(metrics)
-    metrics_mean = metrics.groupby("model").mean()
-    metrics_std = metrics.groupby("model").std()
-    metrics = metrics_mean.join(metrics_std, lsuffix="_mean", rsuffix="_std")
-    metrics.to_csv(f"{path}/metrics.csv")
-
-    fairness_metrics = [
-        pd.read_csv(f"{path}/{fold}/{model_class.__name__}_fairness_metrics.csv")
-        for fold in range(10)
-        for model_class in MODEL_CLASS_LIST
-    ]
-    fairness_metrics = pd.concat(fairness_metrics)
-    fairness_metrics_mean = fairness_metrics.groupby("model").mean()
-    fairness_metrics_std = fairness_metrics.groupby("model").std()
-    fairness_metrics = fairness_metrics_mean.join(
-        fairness_metrics_std, lsuffix="_mean", rsuffix="_std"
-    )
-    fairness_metrics.to_csv(f"{path}/fairness_metrics.csv")
+Tree=402
+num_leaves=5
+num_cat=0
+split_feature=1 1 1 1
+split_gain=0.266733 1.20924 1.43558 1.04477
+threshold=0.5269805176504484 0.42836408604658338 -0.13719439465147187 0.87713639534526722
+decision_type=2 2 2 2
+left_child=1 2 -1 -2
+right_child=3 -3 -4 -5
+leaf_value=0.00011047358711400647 -0.029894168339433751 0.029206651967863623 -0.036567866395820929 0.01755263966414642
+leaf_weight=3496.4648398593181 22.721932621498127 26.768956590560265 20.25202654979239 14.24788538229768
+leaf_count=35842 621 235 1035 1340
+internal_value=0 0.00012064 -0.000100806 -0.0116086
+internal_weight=0 3543.49 3516.72 36.9698
+internal_count=39073 37112 36877 1961
+is_linear=0
+shrinkage=0.137383
 
 
-def experiment_fairness(args):
-    """Function that run experiments from Section 3 of the paper.
-    It will evaluate the fairness of the models trained in the previous experiment.
-    It will also fit Reweighting, Demographic Parity and Equalized Odds classifier, FairGBM and Threshold Optimizer.
-    It will save the models and the metrics in the results folder.
-
-    Args:
-        args (dict): arguments for the experiment
-    """
-    path = f"../results/fair_models/{args['dataset']}"
-    for fold in range(10):
-        Path(f"{path}/{fold}").mkdir(parents=True, exist_ok=True)
-        print("Fold: ", fold)
-        X_train, Y_train, X_val, Y_val, X_test, Y_test = load_split(
-            args["dataset"], fold, args["seed"]
-        )
-        # Workaround to obtain the protected attribute as a binary column
-        if args["dataset"] == "homecredit":  # Small fix to not apply EBE to gender
-            pipeline_preprocess = training.create_pipeline(X_train, Y_train, crit=4)
-        else:
-            pipeline_preprocess = training.create_pipeline(X_train, Y_train)
-        pipeline_preprocess.fit(X_train, Y_train)
-        X_train_preprocessed = pipeline_preprocess.transform(X_train)
-        A_train = X_train_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
-        X_val_preprocessed = pipeline_preprocess.transform(X_val)
-        A_val = X_val_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
-        X_test_preprocessed = pipeline_preprocess.transform(X_test)
-        A_test = X_test_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
-
-        scorer_validation = evaluate.create_fairness_scorer(
-            FAIRNESS_GOAL[args["dataset"]], A_val
-        )
-
-        # Reweighting
-        print("Model: Reweighing")
-        df_rw = pd.DataFrame(X_train_preprocessed)
-        df_rw["DEFAULT"] = Y_train
-        X_train_aif = BinaryLabelDataset(
-            df=df_rw,
-            label_names=["DEFAULT"],
-            protected_attribute_names=[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"],
-        )
-        rw = Reweighing(
-            unprivileged_groups=[{PROTECTED_ATTRIBUTES[args["dataset"]] + "_0": 0}],
-            privileged_groups=[{PROTECTED_ATTRIBUTES[args["dataset"]] + "_0": 1}],
-        )
-        rw.fit(X_train_aif)
-        rw_weights = rw.transform(X_train_aif).instance_weights
-        for model_class in MODEL_CLASS_LIST:
-            print("Model: ", model_class.__name__)
-            study, model = training.optimize_model_fast(
-                model_class,
-                "suggest",
-                X_train,
-                Y_train,
-                X_val,
-                Y_val,
-                fit_params={"classifier__sample_weight": rw_weights},
-                score_func=scorer_validation,
-                n_trials=args["n_trials"],
-                timeout=args["timeout"],
-                n_jobs=args["n_jobs"],
-            )
-            Y_train_score = model.predict_proba(X_train)[:, 1]
-            threshold = training.ks_threshold(Y_train, Y_train_score)
-            model_dict = {"rw_" + model_class.__name__: [model, threshold]}
-            metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
-            fairness_metrics = evaluate.get_fairness_metrics(
-                model_dict, X_test, Y_test, A_test
-            )
-
-            joblib.dump(model, f"{path}/{fold}/rw_{model_class.__name__}.pkl")
-            joblib.dump(
-                study,
-                f"{path}/{fold}/rw_{model_class.__name__}_study.pkl",
-            )
-            metrics.to_csv(
-                f"{path}/{fold}/rw_{model_class.__name__}_metrics.csv",
-                index=False,
-            )
-            fairness_metrics.to_csv(
-                f"{path}/{fold}/rw_{model_class.__name__}_fairness_metrics.csv",
-                index=False,
-            )
-
-            print(f"Finished training with ROC {study.best_value:.2f}")
-
-      
-        for model_class in [DemographicParityClassifier, EqualOpportunityClassifier]:
-            print("Model: ", model_class.__name__)
-            param_space = FAIRNESS_PARAM_SPACES[model_class.__name__]
-            param_space["sensitive_cols"] = {
-                "choices": [PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"],
-                "type": "categorical",
-            }
-            if model_class.__name__ == "EqualOpportunityClassifier":
-                param_space["positive_target"] = {
-                    "choices": [1],
-                    "type": "categorical",
-                }
-            study, model = training.optimize_model_fast(
-                model_class,
-                param_space,
-                X_train,
-                Y_train,
-                X_val,
-                Y_val,
-                score_func=scorer_validation,
-                n_trials=args["n_trials"],
-                timeout=args["timeout"],
-                n_jobs=args["n_jobs"],
-            )
-            Y_train_score = model.predict_proba(X_train)[:, 1]
-            threshold = training.ks_threshold(Y_train, Y_train_score)
-            model_dict = {model_class.__name__: [model, threshold]}
-            metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
-            fairness_metrics = evaluate.get_fairness_metrics(
-                model_dict, X_test, Y_test, A_test
-            )
-            joblib.dump(model, f"{path}/{fold}/{model_class.__name__}.pkl")
-            joblib.dump(
-                study,
-                f"{path}/{fold}/{model_class.__name__}_study.pkl",
-            )
-            metrics.to_csv(
-                f"{path}/{fold}/{model_class.__name__}_metrics.csv",
-                index=False,
-            )
-            fairness_metrics.to_csv(
-                f"{path}/{fold}/{model_class.__name__}_fairness_metrics.csv",
-                index=False,
-            )
-
-            print(f"Finished training with ROC {study.best_value:.2f}")
-
-        model_class = FairGBMClassifier
-        print("Model: ", model_class.__name__)
-        study, model = training.optimize_model_fast(
-            model_class,
-            FAIRNESS_PARAM_SPACES[model_class.__name__],
-            X_train,
-            Y_train,
-            X_val,
-            Y_val,
-            fit_params={"classifier__constraint_group": A_train},
-            score_func=scorer_validation,
-            n_trials=args["n_trials"],
-            timeout=args["timeout"],
-            n_jobs = args["n_jobs"],
-        )
-        Y_train_score = model.predict_proba(X_train)[:, 1]
-        threshold = training.ks_threshold(Y_train, Y_train_score)
-        model_dict = {model_class.__name__: [model, threshold]}
-        metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
-        fairness_metrics = evaluate.get_fairness_metrics(
-            model_dict, X_test, Y_test, A_test
-        )
-
-        joblib.dump(model, f"{path}/{fold}/{model_class.__name__}.pkl")
-        joblib.dump(
-            study,
-            f"{path}/{fold}/{model_class.__name__}_study.pkl",
-        )
-        metrics.to_csv(
-            f"{path}/{fold}/{model_class.__name__}_metrics.csv",
-            index=False,
-        )
-        fairness_metrics.to_csv(
-            f"{path}/{fold}/{model_class.__name__}_fairness_metrics.csv",
-            index=False,
-        )
-
-        print(f"Finished training with ROC {study.best_value:.2f}")
-
-        for model_class in [LogisticRegression, MLPClassifier, LGBMClassifier]:
-            path_ = path
-            path_ = path_.replace("fair_models", "credit_models")
-            model = joblib.load(f"{path_}/{fold}/{model_class.__name__}.pkl")
-            print("Model: ", model_class.__name__)
-            model = model.steps[-1][1]
-            thr_opt = ThresholdOptimizer(
-                estimator=model,
-                constraints="true_positive_rate_parity",
-                objective="balanced_accuracy_score",
-                prefit=True,
-                predict_method="predict_proba",
-            )
-            thr_opt.fit(
-                X_train_preprocessed, 
-                Y_train, 
-                sensitive_features=A_train
-            )
-            class Thr_helper:
-                def __init__(self, model, sensitive_features):
-                    self.model = model
-                    self.sensitive_features = sensitive_features
-                def predict(self, X):
-                    return self.model.predict(X, sensitive_features=self.sensitive_features)
-            thr_opt_helper = Thr_helper(thr_opt, A_test)
-            model_dict = {"thr_" + model_class.__name__: [thr_opt_helper, None]}
-            metrics = evaluate.get_metrics(model_dict, X_test_preprocessed, Y_test)
-            fairness_metrics = evaluate.get_fairness_metrics(
-                model_dict, X_test_preprocessed, Y_test, A_test
-            )
-            joblib.dump(model, f"{path}/{fold}/thr_{model_class.__name__}.pkl")
-            joblib.dump(
-                study,
-                f"{path}/{fold}/thr_{model_class.__name__}_study.pkl",
-            )
-            metrics.to_csv(
-                f"{path}/{fold}/thr_{model_class.__name__}_metrics.csv",
-                index=False,
-            )
-            fairness_metrics.to_csv(
-                f"{path}/{fold}/thr_{model_class.__name__}_fairness_metrics.csv",
-                index=False,
-            )
+Tree=403
+num_leaves=6
+num_cat=0
+split_feature=1 1 1 1 35
+split_gain=0.295798 1.28501 1.11357 0.71386 0.354297
+threshold=0.48577776198034034 0.57331673140404515 0.2765893450781694 0.87713639534526722 1.0000000180025095e-35
+decision_type=2 2 2 2 2
+left_child=2 -2 4 -3 -1
+right_child=1 3 -4 -5 -6
+leaf_value=0.00050308782362550823 0.04162809764990958 -0.028216028847635303 -0.030868187988267522 0.015355731881839854 -0.004171061083636067
+leaf_weight=3174.9070251562225 16.453296939842403 14.314179450040685 22.115983211711864 14.065401460247811 338.72748801114994
+leaf_count=23907 259 419 524 1340 12624
+internal_value=0 0.0110881 -0.000140978 -0.00662233 5.24766e-05
+internal_weight=0 44.8329 3535.75 28.3796 3513.63
+internal_count=39073 2018 37055 1759 36531
+is_linear=0
+shrinkage=0.137383
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--experiment",
-        type=str,
-        default="credit_models",
-        help="name of the experiment to run",
-        choices=["credit_models", "fairness"],
-    )
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        default="german",
-        help="name of the dataset to run experiments",
-        choices=["german", "taiwan", "homecredit"],
-    )
-    parser.add_argument(
-        "--seed", type=int, default=0, help="random seed for the experiment"
-    )
-    parser.add_argument(
-        "--n_trials",
-        type=int,
-        default=100,
-        help="number of trials for the hyperparameter optimization",
-    )
-    parser.add_argument(
-        "--timeout",
-        type=int,
-        default=100,
-        help="timeout in seconds for the hyperparameter optimization",
-    )
-    parser.add_argument(
-        "--n_jobs",
-        type=int,
-        default=1,
-        help="number of jobs to run in parallel for the hyperparameter optimization",
-    )
+Tree=404
+num_leaves=4
+num_cat=0
+split_feature=1 1 1
+split_gain=0.292122 1.07171 1.30793
+threshold=0.85970965606184446 0.53549125078886406 0.44964091889262275
+decision_type=2 2 2
+left_child=1 2 -1
+right_child=-2 -3 -4
+leaf_value=0.00010301837632157429 -0.018888544249495511 0.034753549113019637 -0.037591220099732182
+leaf_weight=3530.643579065706 15.38255058438517 16.741477472824045 17.454616713133873
+leaf_count=36962 1347 523 241
+internal_value=0 8.11793e-05 -8.24734e-05
+internal_weight=0 3564.84 3548.1
+internal_count=39073 37726 37203
+is_linear=0
+shrinkage=0.137383
 
-    args = vars(parser.parse_args())
-    if args["n_trials"] is not None:
-        args["timeout"] = None
 
-    if args["experiment"] == "credit_models":
-        experiment_credit_models(args)
-    elif args["experiment"] == "fairness":
-        experiment_fairness(args)
+Tree=405
+num_leaves=7
+num_cat=0
+split_feature=1 0 1 3 0 0
+split_gain=0.266287 2.06028 1.18374 0.333852 5.0365 0.715807
+threshold=0.26686279291998 -0.51776309438727719 0.76629422804256697 -1.0039588052798765 1.2349352701303606 2.5494590435185889
+decision_type=2 2 2 2 2 2
+left_child=3 -2 -3 4 -1 -5
+right_child=1 2 -4 5 -6 -7
+leaf_value=-0.021116171302540409 0.057307566947846583 0.0089474492129992689 -0.033424742838771247 -3.9677978246883177e-05 0.029367204662051807 0.02358160660252951
+leaf_weight=124.38779150276332 13.236349638442332 47.227015669152024 16.889974252815591 3301.1038728515068 53.26797675639682 24.386968378152233
+leaf_count=3512 354 764 1541 31708 936 258
+internal_value=0 0.00797247 -0.00221631 -0.000176409 -0.00597889 0.000133583
+internal_weight=0 77.3533 64.117 3503.15 177.656 3325.49
+internal_count=39073 2659 2305 36414 4448 31966
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=406
+num_leaves=6
+num_cat=0
+split_feature=0 1 1 14 0
+split_gain=0.274066 2.71462 3.05122 1.91882 1.72228
+threshold=1.6731098612597699 0.80823998422475885 0.50705459482637971 1.0000000180025095e-35 2.4764299449970211
+decision_type=2 2 2 2 2
+left_child=1 2 -1 4 -2
+right_child=3 -3 -4 -5 -6
+leaf_value=0.00035251670718216681 -0.012790834943975503 0.060154662253072623 -0.059598386224777498 0.044824178392261792 0.020503135028164719
+leaf_weight=3313.0388090343085 188.42693223670358 14.243992576084564 16.095665290486068 13.993862844072281 34.725171296013286
+leaf_count=34788 1883 1502 290 161 449
+internal_value=0 0.000318681 6.25693e-05 -0.00451447 -0.00760951
+internal_weight=0 3343.38 3329.13 237.146 223.152
+internal_count=39073 36580 35078 2493 2332
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=407
+num_leaves=5
+num_cat=0
+split_feature=1 1 1 0
+split_gain=0.342233 1.14135 0.919844 0.0599103
+threshold=0.85970965606184446 0.48577776198034034 0.2765893450781694 0.7237315804793828
+decision_type=2 2 2 2
+left_child=1 2 -1 -3
+right_child=-2 3 -4 -5
+leaf_value=4.0570311993491629e-05 -0.020442080749993118 0.02161845842744527 -0.028137935270766957 0.03424044152881757
+leaf_weight=3513.9913524155891 15.387827528815249 15.664596972055735 21.996330279922404 13.054879605188033
+leaf_count=36531 1347 446 524 225
+internal_value=0 8.68046e-05 -0.000134763 0.0273614
+internal_weight=0 3564.71 3535.99 28.7195
+internal_count=39073 37726 37055 671
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=408
+num_leaves=6
+num_cat=0
+split_feature=1 1 1 0 53
+split_gain=0.282466 1.33068 0.873068 0.402918 0.347931
+threshold=0.5269805176504484 0.26686279291998 0.80823998422475885 0.13949879230683684 1.0000000180025095e-35
+decision_type=2 2 2 2 2
+left_child=1 4 -2 -3 -1
+right_child=2 3 -4 -5 -6
+leaf_value=-2.7303496787433259e-05 -0.033631734725415696 0.010253842350506873 0.0089533246479998017 0.037693582239283333 -0.013867001210108356
+leaf_weight=3469.1751676597169 17.923788729822263 18.984925190314243 18.42032781636226 21.589616073702928 34.622109313397232
+leaf_count=35674 305 354 1656 344 740
+internal_value=0 0.000122396 -0.0120502 0.0248576 -0.000164079
+internal_weight=0 3544.37 36.3441 40.5745 3503.8
+internal_count=39073 37112 1961 698 36414
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=409
+num_leaves=5
+num_cat=0
+split_feature=1 1 1 3
+split_gain=0.289105 0.988366 0.937054 0.0586353
+threshold=0.85970965606184446 0.48577776198034034 -0.13719439465147187 1.0000000180025095e-35
+decision_type=2 2 2 2
+left_child=1 2 -1 -3
+right_child=-2 3 -4 -5
+leaf_value=0.00010905428622431622 -0.018713627833023012 0.03173175115900511 -0.021465007303878195 0.019274735471474815
+leaf_weight=3497.9214520708138 15.510137439385288 14.310976159060376 38.410637089761622 14.297045576386152
+leaf_count=35842 1347 355 1213 316
+internal_value=0 8.0457e-05 -0.00012531 0.0255111
+internal_weight=0 3564.94 3536.33 28.608
+internal_count=39073 37726 37055 671
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=410
+num_leaves=6
+num_cat=0
+split_feature=1 1 1 12 0
+split_gain=0.265281 1.37948 0.83249 0.327117 0.235936
+threshold=0.50705459482637971 0.26686279291998 0.87713639534526722 1.0000000180025095e-35 -0.079588503257867871
+decision_type=2 2 2 2 2
+left_child=1 3 -2 -1 -3
+right_child=2 4 -4 -5 -6
+leaf_value=0.00013393408653499986 -0.025654717342864296 0.040981043840112766 0.015644768593551125 -0.0063226265981316636 0.018153229270078376
+leaf_weight=3349.3149525196168 26.096029285748955 13.63455819833325 14.232195333956041 154.95156679415231 22.927382836904144
+leaf_count=34923 652 274 1340 1491 393
+internal_value=0 0.000125434 -0.0110796 -0.000151571 0.026671
+internal_weight=0 3540.83 40.3282 3504.27 36.5619
+internal_count=39073 37081 1992 36414 667
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=411
+num_leaves=8
+num_cat=0
+split_feature=59 0 9 3 65 4 2
+split_gain=0.259851 1.68535 2.37837 1.61614 1.00049 2.69873 1.63259
+threshold=1.0000000180025095e-35 1.0158479745656559 1.0000000180025095e-35 1.0000000180025095e-35 1.0000000180025095e-35 0.73015628834098212 5.1126770669642125
+decision_type=2 2 2 2 2 2 2
+left_child=4 2 -2 -3 5 -1 -6
+right_child=1 3 -4 -5 6 -7 -8
+leaf_value=-0.014526845073891039 0.027945527081694684 -0.002770171235380856 -0.00094718537696876612 -0.058558015537759134 0.00017887937728963904 0.012621878156498284 0.035118623586667549
+leaf_weight=258.27904531670356 79.640795969986357 31.034982047043741 165.53909217542969 14.319707297021521 2912.43119864455 94.34955154688214 25.456164915813133
+leaf_count=10072 528 205 1054 80 25894 1038 202
+internal_value=0 0.00393789 0.00843833 -0.0203888 -0.000348264 -0.00726283 0.00048169
+internal_weight=0 290.535 245.18 45.3547 3290.52 352.629 2937.89
+internal_count=39073 1867 1582 285 37206 11110 26096
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=412
+num_leaves=5
+num_cat=0
+split_feature=2 2 2 9
+split_gain=0.316609 1.36589 1.04873 0.985657
+threshold=5.3500424734303254 4.6663806516815738 4.3783278407096766 1.0000000180025095e-35
+decision_type=2 2 2 2
+left_child=1 2 -1 -2
+right_child=3 -3 -4 -5
+leaf_value=0.00011138287042064329 -0.041367560699143588 0.039585526673895248 -0.031027138626604292 0.0098612972702558001
+leaf_weight=3513.9285089713576 13.481261634267867 16.464988241626997 20.528234524186701 14.939025319181383
+leaf_count=37934 101 412 510 116
+internal_value=0 0.000114416 -6.95183e-05 -0.0144426
+internal_weight=0 3550.92 3534.46 28.4203
+internal_count=39073 38856 38444 217
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=413
+num_leaves=6
+num_cat=0
+split_feature=2 33 2 2 2
+split_gain=0.304622 3.06014 1.65129 1.53165 1.1587
+threshold=4.6737983206336393 1.0000000180025095e-35 4.1038740894832335 1.5905205928915287 4.4661035899757904
+decision_type=2 2 2 2 2
+left_child=2 -2 3 -1 -4
+right_child=1 -3 4 -5 -6
+leaf_value=0.00012686150526187848 0.024186913335771724 -0.051543611467997408 0.060389468320192888 -0.030054406771375337 0.0077550854537839749
+leaf_weight=3475.7934867476806 21.149356631074625 19.216361316037364 14.241643652261702 32.023114597115637 17.707261402858421
+leaf_count=37259 206 211 315 594 488
+internal_value=0 -0.0118672 0.000134496 -0.000148712 0.0312239
+internal_weight=0 40.3657 3539.77 3507.82 31.9489
+internal_count=39073 417 38656 37853 803
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=414
+num_leaves=4
+num_cat=0
+split_feature=2 2 2
+split_gain=0.276502 1.2264 1.24643
+threshold=5.5812264891030496 4.6737983206336393 4.1038740894832335
+decision_type=2 2 2
+left_child=1 2 -1
+right_child=-2 -3 -4
+leaf_value=-0.00012838590763059279 0.017003375644028221 -0.03216482753017761 0.027279353080642121
+leaf_weight=3508.1313491050523 17.953647283837199 22.347596538151265 31.594341278949287
+leaf_count=37853 157 260 803
+internal_value=0 -8.62854e-05 0.000116288
+internal_weight=0 3562.07 3539.73
+internal_count=39073 38916 38656
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=415
+num_leaves=7
+num_cat=0
+split_feature=4 4 48 48 29 0
+split_gain=0.267445 5.77005 2.96166 1.38702 4.58621 3.72149
+threshold=0.81088931517006302 0.97235536882822482 1.0000000180025095e-35 1.0000000180025095e-35 1.0000000180025095e-35 -0.37170489734414075
+decision_type=2 2 2 2 2 2
+left_child=3 -2 -3 4 -1 -5
+right_child=1 2 -4 5 -6 -7
+leaf_value=-0.00035390995970305126 -0.070354669684209239 0.0044931837638505024 -0.021767041867954192 -0.014072288119024267 -0.076011181280992032 0.013506909206329099
+leaf_weight=2452.5296230528184 22.846008047781652 477.73990031737776 97.618839193833992 120.70774938285831 15.210788024211068 392.98508059160667
+leaf_count=30368 173 3510 685 1378 101 2858
+internal_value=0 -0.00265141 3.75508e-05 0.000531554 -0.000820418 0.00702626
+internal_weight=0 598.205 575.359 2981.43 2467.74 513.693
+internal_count=39073 4368 4195 34705 30469 4236
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=416
+num_leaves=7
+num_cat=0
+split_feature=3 9 0 0 68 9
+split_gain=0.357112 3.78674 2.83627 2.2954 1.00784 0.813077
+threshold=1.7181739120164112 1.0000000180025095e-35 -0.15261760177943609 0.86978977752251929 1.0000000180025095e-35 1.0000000180025095e-35
+decision_type=2 2 2 2 2 2
+left_child=4 2 -2 -3 5 -1
+right_child=1 3 -4 -5 -6 -7
+leaf_value=-0.0033735387718278305 -0.022033438681980433 -0.0047031277691782182 0.041507790750109463 -0.069096359717689043 0.033744668955212997 0.0010880293171909321
+leaf_weight=1173.5703067061677 17.029655100952368 52.487258477369323 59.826612589211436 13.040007124014663 16.347701649356168 2247.1550654944012
+leaf_count=11220 106 394 534 107 134 26578
+internal_value=0 0.00674125 0.0274279 -0.0175222 -0.000279975 -0.000442633
+internal_weight=0 142.384 76.8563 65.5273 3437.07 3420.73
+internal_count=39073 1141 640 501 37932 37798
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=417
+num_leaves=7
+num_cat=0
+split_feature=29 48 0 0 54 4
+split_gain=0.284402 5.62426 4.18863 0.530146 2.56705 1.15417
+threshold=1.0000000180025095e-35 1.0000000180025095e-35 0.5776733834362463 2.3303717479538846 1.0000000180025095e-35 -1.8533005701896064
+decision_type=2 2 2 2 2 2
+left_child=3 -2 -3 5 -5 -1
+right_child=1 2 -4 4 -6 -7
+leaf_value=0.018959540999424027 -0.057489236779219355 0.051769240337887101 -0.02958940756036909 0.05679648092778964 -0.0091201364902083765 -0.00070984124104990769
+leaf_weight=57.250557359602681 18.684818685869686 42.589818959328113 16.593291174911428 17.175339995577815 31.769207628851291 3395.3058819020143
+leaf_count=1674 128 346 183 341 320 36081
+internal_value=0 0.00821189 0.0289579 -0.000182368 0.0140147 -0.000383653
+internal_weight=0 77.8679 59.1831 3501.5 48.9445 3452.56
+internal_count=39073 657 529 38416 661 37755
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=418
+num_leaves=6
+num_cat=0
+split_feature=2 2 2 3 11
+split_gain=0.27674 2.08052 1.64015 1.04524 0.521105
+threshold=3.6600502305179492 4.4339603578501716 3.3843602011328291 -0.22620660033808021 1.0000000180025095e-35
+decision_type=2 2 2 2 2
+left_child=2 -2 4 -3 -1
+right_child=1 3 -4 -5 -6
+leaf_value=0.00051912255373868339 -0.050769175048977891 -0.018660643787097038 0.038251175953270211 0.018138267722928113 -0.005000883091017201
+leaf_weight=3120.7152308100185 16.886513349461893 23.966238012348185 21.223415268934332 37.134654277837399 360.01913046515619
+leaf_count=34447 517 308 123 784 2894
+internal_value=0 -0.00809384 0.000180363 0.00370387 -5.18293e-05
+internal_weight=0 77.9874 3501.96 61.1009 3480.73
+internal_count=39073 1609 37464 1092 37341
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=419
+num_leaves=4
+num_cat=0
+split_feature=0 4 0
+split_gain=0.267334 1.12492 1.38924
+threshold=2.6955172405617254 -2.822096892138577 2.4764299449970211
+decision_type=2 2 2
+left_child=1 -1 -3
+right_child=-2 2 -4
+leaf_value=-0.040125622536053576 -0.015352016145191509 5.9771648249015286e-05 0.041245866541409805
+leaf_weight=13.073225176529375 21.276190717151621 3529.7425517547335 15.520234741881721
+leaf_count=227 285 38368 193
+internal_value=0 9.17729e-05 0.000240137
+internal_weight=0 3558.34 3545.26
+internal_count=39073 38788 38561
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=420
+num_leaves=7
+num_cat=0
+split_feature=0 4 26 26 2 2
+split_gain=0.271905 2.01464 5.72644 1.50424 1.01542 3.20623
+threshold=2.0382553538676116 -0.077173979949826874 1.0000000180025095e-35 1.0000000180025095e-35 5.5812264891030496 4.6737983206336393
+decision_type=2 2 2 2 2 2
+left_child=4 3 -3 -2 5 -1
+right_child=1 2 -4 -5 -6 -7
+leaf_value=0.00037908987306499106 0.026493919390770448 -0.057565503604039232 0.043332056355668662 -0.024956916970017586 0.038469737734912801 -0.054878900993425378
+leaf_weight=3444.3937223239045 37.562063527177088 34.712162816431373 15.288924713560844 15.005547063861739 13.034956054762004 19.927824817768851
+leaf_count=37448 507 321 132 292 129 244
+internal_value=0 -0.00697172 -0.0267125 0.0118061 0.000205179 6.11431e-05
+internal_weight=0 102.569 50.0011 52.5676 3477.36 3464.32
+internal_count=39073 1252 453 799 37821 37692
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=421
+num_leaves=7
+num_cat=0
+split_feature=49 55 4 7 0 62
+split_gain=0.264298 3.68288 1.9596 0.820785 2.25753 0.976122
+threshold=1.0000000180025095e-35 1.0000000180025095e-35 0.0842920737083349 1.0000000180025095e-35 -0.37170489734414075 1.0000000180025095e-35
+decision_type=2 2 2 2 2 2
+left_child=3 2 -2 5 -5 -1
+right_child=1 -3 -4 4 -6 -7
+leaf_value=0.0008898774175751128 0.013161973343100344 0.074322425563765032 -0.028218016556421529 -0.041892276341013446 -0.0025624567596874031 -0.010017868013670586
+leaf_weight=3092.8130918225133 54.99914544011699 13.298596890293991 35.561896399711259 32.261164967607328 188.29055999958655 163.00290510890045
+leaf_count=32865 423 179 188 564 1571 3283
+internal_value=0 0.00682731 -0.00308802 -0.000205671 -0.00831631 0.000343764
+internal_weight=0 103.86 90.561 3476.37 220.552 3255.82
+internal_count=39073 790 611 38283 2135 36148
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=422
+num_leaves=5
+num_cat=0
+split_feature=19 105 61 3
+split_gain=0.261672 0.64161 4.74445 4.34311
+threshold=1.0000000180025095e-35 1.0000000180025095e-35 1.0000000180025095e-35 0.55154560460371638
+decision_type=2 2 2 2
+left_child=1 3 -3 -1
+right_child=-2 2 -4 -5
+leaf_value=0.010020452666323792 0.019320865773438677 -1.8278738799657889e-05 0.0543022973905238 -0.022602685100557924
+leaf_weight=156.19418226558446 13.172409352584507 3228.7506315811515 30.630229997179413 151.94456708212965
+leaf_count=2529 408 34565 352 1219
+internal_value=0 -7.42017e-05 0.000492292 -0.00606628
+internal_weight=0 3567.52 3259.38 308.139
+internal_count=39073 38665 34917 3748
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=423
+num_leaves=7
+num_cat=0
+split_feature=3 9 0 55 68 38
+split_gain=0.259775 2.91095 2.43361 2.11096 0.757945 0.68689
+threshold=1.7181739120164112 1.0000000180025095e-35 1.0000000180025095e-35 1.0000000180025095e-35 1.0000000180025095e-35 1.0000000180025095e-35
+decision_type=2 2 2 2 2 2
+left_child=4 2 -2 -3 5 -1
+right_child=1 3 -4 -5 -6 -7
+leaf_value=-9.2259033238972717e-05 -0.016092592126852098 -0.032406768315196635 0.039091250636036058 0.02009958980750768 0.029153966507005791 -0.013443527685317681
+leaf_weight=3349.2548623866787 20.725938689691247 44.544909261661815 55.371497569722123 21.386596086318605 16.471761029475601 74.338574529981997
+leaf_count=36362 139 372 501 129 134 1436
+internal_value=0 0.00575474 0.0240613 -0.0153747 -0.000240713 -0.000382184
+internal_weight=0 142.029 76.0974 65.9315 3440.07 3423.59
+internal_count=39073 1141 640 501 37932 37798
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=424
+num_leaves=5
+num_cat=0
+split_feature=2 2 2 9
+split_gain=0.262461 1.71507 1.23839 0.747949
+threshold=5.3500424734303254 4.6663806516815738 4.3783278407096766 1.0000000180025095e-35
+decision_type=2 2 2 2
+left_child=1 2 -1 -2
+right_child=3 -3 -4 -5
+leaf_value=9.6809872829718645e-05 -0.036731122628053399 0.045321973223620395 -0.033870914509753963 0.0081320285230215058
+leaf_weight=3517.7662525738315 13.379502490162849 15.755119373465275 20.36964816134423 14.73224359145388
+leaf_count=37934 101 412 510 116
+internal_value=0 0.000102629 -9.88001e-05 -0.0132231
+internal_weight=0 3553.89 3538.14 28.1117
+internal_count=39073 38856 38444 217
+is_linear=0
+shrinkage=0.137383
+
+
+Tree=425
+num_leaves=6
+num_cat=0
+split_feature=2 2 2 2 4
+split_gain=0.267272 2.78984 2.33569 0.941589 0.47823
+threshold=3.5512577525543145 1
