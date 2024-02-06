@@ -51,6 +51,10 @@ HOMECREDIT_PARAM_SPACE["LogisticRegression"]["max_iter"] = {
     "step": 1,
     "type": "int",
 }
+HOMECREDIT_PARAM_SPACE["MLPClassifier"]["batch_size"] = {
+    "choices" : [512],
+    "type" : "categorical"
+}
 
 
 FAIRNESS_PARAM_SPACES = {}
@@ -259,9 +263,13 @@ def experiment_fairness(args):
             rw_weights = rw.transform(X_train_aif).instance_weights
             for model_class in MODEL_CLASS_LIST:
                 print("Model: ", model_class.__name__)
+                if args["dataset"] == "homecredit":
+                    param_space = HOMECREDIT_PARAM_SPACE[model_class.__name__]
+                else:
+                    param_space = "suggest"
                 study, model = training.optimize_model_fast(
                     model_class,
-                    "suggest",
+                    param_space,
                     X_train,
                     Y_train,
                     X_val,
@@ -298,7 +306,7 @@ def experiment_fairness(args):
 
 
         for model_class in [DemographicParityClassifier, EqualOpportunityClassifier]:
-            if model_class.__name__ in FAIRNESS_CLASS_LIST:
+            if not model_class.__name__ in FAIRNESS_CLASS_LIST:
                 continue
 
             print("Model: ", model_class.__name__)
