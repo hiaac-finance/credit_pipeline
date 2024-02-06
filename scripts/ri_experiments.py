@@ -40,6 +40,12 @@ import credit_pipeline.data_exploration as dex
 import credit_pipeline.training as tr
 import credit_pipeline.reject_inference as ri
 
+import sys
+
+sys.path.append("../")
+
+pd.set_option('future.no_silent_downcasting', True)
+
 from submodules.topsis_python import topsis as top
 
 
@@ -47,16 +53,17 @@ from submodules.topsis_python import topsis as top
 #@title Read dataset
 df_o = pd.read_csv(path+'application_train.csv')    #HomeCredit training dataset
 
+# df_o = df_o.sample(frac=0.25)
 
 # %%
 #@title Set seed
 new_seed = True #@param {type:"boolean"}
 
 if new_seed:
-    seed_number = secrets.randbelow(10000000000) #to name the results files
+    seed_number = secrets.randbelow(1000000) #to name the results files
 
     while seed_number <100:
-        seed_number = secrets.randbelow(10000000000)
+        seed_number = secrets.randbelow(1000000)
 else:
     seed_number = 15444
 
@@ -91,7 +98,7 @@ params_dict['LightGBM_2'] = {'boosting_type': 'gbdt', 'class_weight': None,
 
 # %%
 N_splits=5
-kf = KFold(n_splits=N_splits, random_state=main_seed)   #80-20 split for train-test
+kf = KFold(n_splits=N_splits, random_state=main_seed, shuffle = True)   #80-20 split for train-test
 hist_dict = {}
 data_dict = {}
 run = False or True
@@ -130,26 +137,26 @@ for fold_number, (train_index, test_index) in enumerate(kf.split(df_o)):
 
     models_dict.update(
         ri.augmentation_with_soft_cutoff(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
-    models_dict.update(
-        ri.augmentation(X_train_acp, y_train_acp, X_train_rej, mode='up', seed = seed_number))
-    models_dict.update(
-        ri.augmentation(X_train_acp, y_train_acp, X_train_rej, mode='down', seed = seed_number))
-    models_dict.update(
-        ri.fuzzy_augmentation(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
-    models_dict.update(
-        ri.extrapolation(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
-    models_dict.update(
-        ri.parcelling(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
-    models_dict.update(
-        ri.label_spreading(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
+    # models_dict.update(
+    #     ri.augmentation(X_train_acp, y_train_acp, X_train_rej, mode='up', seed = seed_number))
+    # models_dict.update(
+    #     ri.augmentation(X_train_acp, y_train_acp, X_train_rej, mode='down', seed = seed_number))
+    # models_dict.update(
+    #     ri.fuzzy_augmentation(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
+    # models_dict.update(
+    #     ri.extrapolation(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
+    # models_dict.update(
+    #     ri.parcelling(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
+    # models_dict.update(
+    #     ri.label_spreading(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
     if run:
         models_dict.update(
             ri.trusted_non_outliers(X_train_acp, y_train_acp, X_train_rej,
-                                    X_val_acp, y_val_acp, iterations=50,p = 0.07, output=-1,
+                                    X_val_acp, y_val_acp, iterations=5,p = 0.07, output=-1,
                                     seed=seed_number, technique='extrapolation'))
         models_dict.update(
             ri.trusted_non_outliers(X_train_acp, y_train_acp, X_train_rej,
-                                    X_val_acp, y_val_acp, iterations=50,p = 0.07, output=-1,
+                                    X_val_acp, y_val_acp, iterations=5,p = 0.07, output=-1,
                                     seed=seed_number, technique='LS'))
             
     hist_dict[fold_number] = models_dict
@@ -167,7 +174,7 @@ seed_number = main_seed
 # %%
 hist_kick = []
 
-kf = KFold(n_splits=N_splits, random_state=main_seed)   #80-20 split for train-test
+kf = KFold(n_splits=N_splits, random_state=main_seed, shuffle = True)   #80-20 split for train-test
 
 
 

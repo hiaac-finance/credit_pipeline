@@ -17,6 +17,10 @@ from scipy.stats import ks_2samp
 from sklearn.semi_supervised import LabelSpreading
 
 import credit_pipeline.training as tr
+import sys
+
+sys.path.append("../")
+
 from submodules.topsis_python import topsis as top
 
 ri_datasets_path = "../data/riData/"
