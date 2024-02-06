@@ -601,6 +601,8 @@ def trusted_non_outliers(X_train, y_train, X_unl,
 
     if save_log == True:
         filepath = Path(os.path.join(ri_datasets_path,f'TN-{seed}.joblib'))
+        if technique == 'LS':
+            filepath = Path(os.path.join(ri_datasets_path,f'TN+-{seed}.joblib'))
         filepath.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(dict_clfs, filepath)
     
@@ -609,6 +611,10 @@ def trusted_non_outliers(X_train, y_train, X_unl,
 
     trusted_clf = tr.create_pipeline(X_train, y_train, clf_class(**clf_params))
     trusted_clf.fit(X_train, y_train)
+
+    if technique == 'LS':
+        return {'TN+': trusted_clf}
+    
     return {'TN': trusted_clf}
 
 

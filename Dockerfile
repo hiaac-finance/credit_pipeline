@@ -17,7 +17,7 @@ RUN apt-get update
 
 RUN apt-get install -y \
     python3-pip \
-    python3-tk \
+    # python3-tk \
     apt-utils \
     vim \
     git \
@@ -50,7 +50,8 @@ RUN pip install numpy \
 # docker build -t credit:$USER -f Dockerfile --build-arg OUTSIDE_GROUP=`/usr/bin/id -ng $USER` --build-arg OUTSIDE_GID=`/usr/bin/id -g $USER` --build-arg OUTSIDE_USER=$USER --build-arg OUTSIDE_UID=$UID .
 
 
-# docker run -it --userns=host --name credit -v /work/$USER:/work/$USER credit:$USER  /bin/bash
+# docker run -it --userns=host --name credit -v /work/athyrson:/work/athyrson credit:$USER  /bin/bash
 
-# docker exec -ti -u $USER credit bash
+# docker exec -ti -u $USER credit /bin/bash
 
+# docker attach credit
