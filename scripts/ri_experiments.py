@@ -227,7 +227,6 @@ filepath = Path(os.path.join(ri_datasets_path,f'DATA-{main_seed}.joblib'))
 filepath.parent.mkdir(parents=True, exist_ok=True)
 joblib.dump(data_dict, filepath)
 
-# %%
 
 
 
@@ -259,7 +258,7 @@ for i in range(num_plots, num_rows * num_cols):
 
 plt.tight_layout()
 plt.savefig(f'all_kick_by_AR_{main_seed}',  dpi=150)
-plt.show()
+
 
 
 
