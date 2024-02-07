@@ -22,6 +22,10 @@ RUN apt-get install -y \
     git \
     unzip 
 
+ARG DEBIAN_FRONTEND=noninteractive
+ENV TZ=America/Sao_Paulo
+RUN apt-get install -y python3-tk
+
 # alias python='python3'
 RUN ln -s /usr/bin/python3 /usr/bin/python
 
@@ -31,14 +35,14 @@ RUN pip3 install --upgrade pip
 # Install python packages
 RUN pip install numpy \
     matplotlib \
-    pandas \
+    pandas==2.0.3 \
     numpy \
     seaborn \
     tensorflow \
     chardet \
-    scikit-learn \
+    scikit-learn==1.4.0 \
     optuna \
-    lightgbm \
+    lightgbm==4.3.0 \
     aif360 \
     fairgbm \
     scikit-lego[cvxpy] \
