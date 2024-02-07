@@ -21,16 +21,16 @@ import warnings
 warnings.filterwarnings("ignore")
 
 MODEL_CLASS_LIST = [
-    #LogisticRegression,
+    LogisticRegression,
     MLPClassifier,
-    #RandomForestClassifier,
-    #LGBMClassifier,
+    RandomForestClassifier,
+    LGBMClassifier,
 ]
 FAIRNESS_CLASS_LIST = [
     "Reweighing",
-    #"DemographicParityClassifier",
-    #"EqualOpportunityClassifier",
-    #"FairGBMClassifier",
+    # "DemographicParityClassifier",
+    # "EqualOpportunityClassifier",
+    # "FairGBMClassifier",
     "ThresholdOptimizer",
 ]
 
@@ -52,8 +52,8 @@ HOMECREDIT_PARAM_SPACE["LogisticRegression"]["max_iter"] = {
     "type": "int",
 }
 HOMECREDIT_PARAM_SPACE["MLPClassifier"]["batch_size"] = {
-    "choices" : [512],
-    "type" : "categorical"
+    "choices": [512],
+    "type": "categorical",
 }
 
 
@@ -75,11 +75,7 @@ FAIRNESS_PARAM_SPACES["EqualOpportunityClassifier"] = {
 FAIRNESS_PARAM_SPACES["DemographicParityClassifier"] = FAIRNESS_PARAM_SPACES[
     "EqualOpportunityClassifier"
 ].copy()
-FAIRNESS_GOAL = {
-    "german" : 0.1,
-    "taiwan" : 0.1,
-    "homecredit" : 0.1
-}
+FAIRNESS_GOAL = {"german": 0.1, "taiwan": 0.1, "homecredit": 0.1}
 
 
 def load_split(dataset_name, fold, seed=0):
@@ -99,7 +95,7 @@ def load_split(dataset_name, fold, seed=0):
         pandas.DataFrame: train, validation and test sets
     """
     df = data.load_dataset(dataset_name)
-    train, test = training.create_train_test(df, final=False, seed=seed)
+    train, test = training.create_train_test(df, final=True, seed=seed)
     X_train_ = train.drop(columns=["DEFAULT"])
     Y_train_ = train["DEFAULT"]
     X_test = test.drop(columns=["DEFAULT"])
@@ -253,7 +249,9 @@ def experiment_fairness(args):
             X_train_aif = BinaryLabelDataset(
                 df=df_rw,
                 label_names=["DEFAULT"],
-                protected_attribute_names=[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"],
+                protected_attribute_names=[
+                    PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"
+                ],
             )
             rw = Reweighing(
                 unprivileged_groups=[{PROTECTED_ATTRIBUTES[args["dataset"]] + "_0": 0}],
@@ -303,7 +301,6 @@ def experiment_fairness(args):
                 )
 
                 print(f"Finished training with ROC {study.best_value:.2f}")
-
 
         for model_class in [DemographicParityClassifier, EqualOpportunityClassifier]:
             if not model_class.__name__ in FAIRNESS_CLASS_LIST:
@@ -369,7 +366,7 @@ def experiment_fairness(args):
                 score_func=scorer_validation,
                 n_trials=args["n_trials"],
                 timeout=args["timeout"],
-                n_jobs = args["n_jobs"],
+                n_jobs=args["n_jobs"],
             )
             Y_train_score = model.predict_proba(X_train)[:, 1]
             threshold = training.ks_threshold(Y_train, Y_train_score)
@@ -413,17 +410,18 @@ def experiment_fairness(args):
                 prefit=True,
                 predict_method="predict_proba",
             )
-            thr_opt.fit(
-                X_train_preprocessed, 
-                Y_train, 
-                sensitive_features=A_train
-            )
+            thr_opt.fit(X_train_preprocessed, Y_train, sensitive_features=A_train)
+
             class Thr_helper:
                 def __init__(self, model, sensitive_features):
                     self.model = model
                     self.sensitive_features = sensitive_features
+
                 def predict(self, X):
-                    return self.model.predict(X, sensitive_features=self.sensitive_features)
+                    return self.model.predict(
+                        X, sensitive_features=self.sensitive_features
+                    )
+
             thr_opt_helper = Thr_helper(thr_opt, A_test)
             model_dict = {"thr_" + model_class.__name__: [thr_opt_helper, None]}
             metrics = evaluate.get_metrics(model_dict, X_test_preprocessed, Y_test)
@@ -445,6 +443,84 @@ def experiment_fairness(args):
             )
 
 
+def summarize_credit_experiment(args):
+    """Function that summarizes the results of the credit models experiment.
+    It will print the mean and standard deviation of the metrics and fairness metrics.
+    """
+    from credit_pipeline.training import EBE  # necessary to load pickle
+    from glob import glob
+
+    path = "../results/credit_models"
+    datasets = ["german"]  # , "taiwan", "homecredit"]
+    for dataset in datasets:
+        args["dataset"] = dataset
+        metrics_folds_val = []
+        metrics_folds_test = []
+        for fold in range(10):
+            model_dict = {}
+            X_train, Y_train, X_val, Y_val, X_test, Y_test = load_split(
+                args["dataset"], fold, args["seed"]
+            )
+
+            # It was necessary to compute the pipeline again due to pickle error
+            if args["dataset"] == "homecredit":
+                pipeline_preprocess = training.create_pipeline(X_train, Y_train, crit=4)
+            else:
+                pipeline_preprocess = training.create_pipeline(X_train, Y_train)
+            pipeline_preprocess.fit(X_train, Y_train)
+            X_train_preprocessed = pipeline_preprocess.transform(X_train)
+            X_val_preprocessed = pipeline_preprocess.transform(X_val)
+            A_val = X_val_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
+            X_test_preprocessed = pipeline_preprocess.transform(X_test)
+            A_test = X_test_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
+            del (
+                X_train_preprocessed,
+                X_val_preprocessed,
+                X_test_preprocessed,
+                pipeline_preprocess,
+            )
+
+            models_files = glob(f"{path}/{dataset}/{fold}/*.pkl")
+            # remove the ones that are not models
+            models_files = [file for file in models_files if "study" not in file]
+
+            for file in models_files:
+                model = joblib.load(file)
+                model_name = file.split("/")[-1].split(".")[0]
+                print(model_name)
+                Y_train_pred = model.predict_proba(X_train)[:, 1]
+                threshold = training.ks_threshold(Y_train, Y_train_pred)
+                model_dict[model_name] = [model, threshold]
+
+            metrics_folds_val.append(evaluate.get_metrics(model_dict, X_val, Y_val))
+            metrics_folds_test.append(evaluate.get_metrics(model_dict, X_test, Y_test))
+
+        metrics_val = pd.concat(metrics_folds_val)
+        metrics_val_mean = metrics_val.groupby("model").mean()
+        metrics_val_std = metrics_val.groupby("model").std()
+        for col in metrics_val_mean.columns:
+            metrics_val_mean[col + "_"] = (
+                metrics_val_mean[col].round(2).astype(str)
+                + " ± "
+                + metrics_val_std[col].round(2).astype(str)
+            )
+        metrics_val_mean = metrics_val_mean.drop(columns=metrics_val_std.columns)
+
+        metrics_test = pd.concat(metrics_folds_test)
+        metrics_test_mean = metrics_test.groupby("model").mean()
+        metrics_test_std = metrics_test.groupby("model").std()
+        for col in metrics_test_mean.columns:
+            metrics_test_mean[col + "_info"] = (
+                metrics_test_mean[col].round(2).astype(str)
+                + " ± "
+                + metrics_test_std[col].round(2).astype(str)
+            )
+        metrics_test_mean = metrics_test_mean.drop(columns=metrics_test_std.columns)
+
+        print(metrics_val_mean)
+        print(metrics_test_mean)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -452,7 +528,7 @@ if __name__ == "__main__":
         type=str,
         default="credit_models",
         help="name of the experiment to run",
-        choices=["credit_models", "fairness"],
+        choices=["credit_models", "fairness", "summarize"],
     )
     parser.add_argument(
         "--dataset",
@@ -491,3 +567,5 @@ if __name__ == "__main__":
         experiment_credit_models(args)
     elif args["experiment"] == "fairness":
         experiment_fairness(args)
+    elif args["experiment"] == "summarize":
+        summarize_credit_experiment(args)
