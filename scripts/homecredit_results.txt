@@ -1,0 +1,96 @@
+Performance metrics
+------------Validation
+                               AUC_ Brier Score_ Balanced Accuracy_  \
+model                                                                 
+LGBMClassifier          0.76 ± 0.01  0.12 ± 0.06        0.69 ± 0.01   
+LogisticRegression      0.74 ± 0.01   0.21 ± 0.0        0.68 ± 0.01   
+MLPClassifier           0.74 ± 0.01   0.07 ± 0.0        0.68 ± 0.01   
+RandomForestClassifier  0.75 ± 0.01   0.1 ± 0.05        0.68 ± 0.01   
+
+                          Accuracy_   Precision_      Recall_          F1_  
+model                                                                       
+LGBMClassifier           0.7 ± 0.01  0.17 ± 0.01  0.69 ± 0.02  0.27 ± 0.01  
+LogisticRegression      0.68 ± 0.01   0.16 ± 0.0  0.67 ± 0.02  0.25 ± 0.01  
+MLPClassifier           0.69 ± 0.01   0.16 ± 0.0  0.67 ± 0.03  0.26 ± 0.01  
+RandomForestClassifier  0.68 ± 0.01   0.16 ± 0.0  0.68 ± 0.02  0.26 ± 0.01  
+------------Test
+                              AUC_ Brier Score_ Balanced Accuracy_  \
+model                                                                
+LGBMClassifier          0.76 ± 0.0  0.12 ± 0.06         0.69 ± 0.0   
+LogisticRegression      0.74 ± 0.0   0.21 ± 0.0         0.68 ± 0.0   
+MLPClassifier           0.74 ± 0.0   0.07 ± 0.0         0.68 ± 0.0   
+RandomForestClassifier  0.74 ± 0.0   0.1 ± 0.05         0.68 ± 0.0   
+
+                          Accuracy_  Precision_      Recall_         F1_  
+model                                                                     
+LGBMClassifier           0.7 ± 0.01  0.16 ± 0.0  0.68 ± 0.01  0.26 ± 0.0  
+LogisticRegression      0.68 ± 0.01  0.16 ± 0.0  0.67 ± 0.01  0.25 ± 0.0  
+MLPClassifier           0.69 ± 0.02  0.16 ± 0.0  0.67 ± 0.02  0.26 ± 0.0  
+RandomForestClassifier  0.68 ± 0.01  0.16 ± 0.0  0.68 ± 0.01  0.25 ± 0.0  
+----------------------------------------------
+Fairness metrics
+------------Validation
+                                   DPD_         EOD_         AOD_  \
+model                                                               
+FairGBMClassifier             0.0 ± 0.0  0.01 ± 0.01    0.0 ± 0.0   
+LGBMClassifier              0.07 ± 0.08  0.06 ± 0.07  0.06 ± 0.07   
+LogisticRegression           0.18 ± 0.0  0.15 ± 0.02  0.16 ± 0.01   
+MLPClassifier                 0.0 ± 0.0    0.0 ± 0.0    0.0 ± 0.0   
+RandomForestClassifier      0.04 ± 0.07  0.04 ± 0.06  0.04 ± 0.06   
+rw_LGBMClassifier           0.01 ± 0.02  0.01 ± 0.01  0.01 ± 0.01   
+rw_LogisticRegression        0.02 ± 0.0  0.02 ± 0.02  0.01 ± 0.01   
+rw_MLPClassifier              0.0 ± 0.0    0.0 ± 0.0    0.0 ± 0.0   
+rw_RandomForestClassifier   0.02 ± 0.03  0.01 ± 0.02  0.01 ± 0.02   
+thr_LGBMClassifier          0.02 ± 0.01  0.02 ± 0.01  0.01 ± 0.01   
+thr_LogisticRegression       0.02 ± 0.0  0.02 ± 0.02  0.01 ± 0.01   
+thr_MLPClassifier            0.02 ± 0.0  0.02 ± 0.01  0.01 ± 0.01   
+thr_RandomForestClassifier  0.03 ± 0.01  0.02 ± 0.02  0.02 ± 0.01   
+
+                                  APVD_         GMA_ balanced_accuracy_  
+model                                                                    
+FairGBMClassifier           0.04 ± 0.04   0.91 ± 0.0         0.51 ± 0.0  
+LGBMClassifier              0.03 ± 0.02  0.82 ± 0.12         0.58 ± 0.1  
+LogisticRegression           0.01 ± 0.0   0.66 ± 0.0        0.68 ± 0.01  
+MLPClassifier                0.09 ± 0.1   0.91 ± 0.0          0.5 ± 0.0  
+RandomForestClassifier      0.07 ± 0.16   0.85 ± 0.1        0.55 ± 0.09  
+rw_LGBMClassifier           0.06 ± 0.04   0.85 ± 0.1        0.56 ± 0.09  
+rw_LogisticRegression        0.03 ± 0.0   0.68 ± 0.0        0.67 ± 0.01  
+rw_MLPClassifier            0.13 ± 0.15   0.91 ± 0.0          0.5 ± 0.0  
+rw_RandomForestClassifier   0.02 ± 0.01   0.86 ± 0.1        0.55 ± 0.08  
+thr_LGBMClassifier           0.03 ± 0.0   0.7 ± 0.01        0.69 ± 0.01  
+thr_LogisticRegression       0.03 ± 0.0  0.67 ± 0.01         0.67 ± 0.0  
+thr_MLPClassifier            0.03 ± 0.0  0.68 ± 0.01        0.68 ± 0.01  
+thr_RandomForestClassifier   0.03 ± 0.0  0.68 ± 0.01        0.68 ± 0.01  
+------------Test
+                                   DPD_         EOD_         AOD_  \
+model                                                               
+FairGBMClassifier             0.0 ± 0.0    0.0 ± 0.0    0.0 ± 0.0   
+LGBMClassifier              0.07 ± 0.08  0.06 ± 0.07  0.06 ± 0.07   
+LogisticRegression           0.18 ± 0.0   0.16 ± 0.0   0.17 ± 0.0   
+MLPClassifier                 0.0 ± 0.0    0.0 ± 0.0    0.0 ± 0.0   
+RandomForestClassifier      0.04 ± 0.07  0.04 ± 0.06  0.04 ± 0.06   
+rw_LGBMClassifier           0.01 ± 0.01  0.01 ± 0.01  0.01 ± 0.01   
+rw_LogisticRegression        0.02 ± 0.0   0.02 ± 0.0    0.0 ± 0.0   
+rw_MLPClassifier              0.0 ± 0.0    0.0 ± 0.0    0.0 ± 0.0   
+rw_RandomForestClassifier   0.02 ± 0.02  0.01 ± 0.01  0.01 ± 0.02   
+thr_LGBMClassifier          0.02 ± 0.01   0.01 ± 0.0  0.01 ± 0.01   
+thr_LogisticRegression       0.02 ± 0.0    0.0 ± 0.0   0.01 ± 0.0   
+thr_MLPClassifier            0.02 ± 0.0    0.0 ± 0.0   0.01 ± 0.0   
+thr_RandomForestClassifier  0.02 ± 0.01   0.01 ± 0.0  0.01 ± 0.01   
+
+                                  APVD_         GMA_ balanced_accuracy_  
+model                                                                    
+FairGBMClassifier           0.03 ± 0.02   0.92 ± 0.0         0.51 ± 0.0  
+LGBMClassifier              0.02 ± 0.02  0.82 ± 0.12        0.58 ± 0.09  
+LogisticRegression           0.01 ± 0.0   0.66 ± 0.0         0.68 ± 0.0  
+MLPClassifier               0.09 ± 0.08   0.91 ± 0.0          0.5 ± 0.0  
+RandomForestClassifier      0.06 ± 0.15   0.85 ± 0.1        0.55 ± 0.08  
+rw_LGBMClassifier           0.02 ± 0.01   0.85 ± 0.1        0.56 ± 0.08  
+rw_LogisticRegression        0.03 ± 0.0   0.68 ± 0.0         0.67 ± 0.0  
+rw_MLPClassifier            0.04 ± 0.04   0.91 ± 0.0          0.5 ± 0.0  
+rw_RandomForestClassifier   0.02 ± 0.01  0.86 ± 0.09        0.55 ± 0.08  
+thr_LGBMClassifier           0.03 ± 0.0  0.69 ± 0.01         0.69 ± 0.0  
+thr_LogisticRegression       0.03 ± 0.0  0.67 ± 0.01         0.67 ± 0.0  
+thr_MLPClassifier            0.03 ± 0.0  0.68 ± 0.01         0.68 ± 0.0  
+thr_RandomForestClassifier   0.03 ± 0.0  0.68 ± 0.01         0.67 ± 0.0  
+----------------------------------------------
