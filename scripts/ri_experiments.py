@@ -44,7 +44,7 @@ import sys
 
 sys.path.append("../")
 
-pd.set_option('future.no_silent_downcasting', True)
+# pd.set_option('future.no_silent_downcasting', True)
 
 from submodules.topsis_python import topsis as top
 
