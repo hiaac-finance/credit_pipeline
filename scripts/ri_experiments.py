@@ -44,7 +44,7 @@ import sys
 
 sys.path.append("../")
 
-pd.set_option('future.no_silent_downcasting', True)
+
 
 from submodules.topsis_python import topsis as top
 
@@ -52,8 +52,6 @@ from submodules.topsis_python import topsis as top
 # %%
 #@title Read dataset
 df_o = pd.read_csv(path+'application_train.csv')    #HomeCredit training dataset
-
-# df_o = df_o.sample(frac=0.25)
 
 # %%
 #@title Set seed
@@ -65,7 +63,7 @@ if new_seed:
     while seed_number <100:
         seed_number = secrets.randbelow(1000000)
 else:
-    seed_number = 15444
+    seed_number = 13582
 
 main_seed = seed_number
 
@@ -98,6 +96,8 @@ params_dict['LightGBM_2'] = {'boosting_type': 'gbdt', 'class_weight': None,
 
 # %%
 N_splits=5
+n_iterations = 50
+p_value = 0.07
 kf = KFold(n_splits=N_splits, random_state=main_seed, shuffle = True)   #80-20 split for train-test
 hist_dict = {}
 data_dict = {}
@@ -137,32 +137,47 @@ for fold_number, (train_index, test_index) in enumerate(kf.split(df_o)):
 
     models_dict.update(
         ri.augmentation_with_soft_cutoff(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
-    # models_dict.update(
-    #     ri.augmentation(X_train_acp, y_train_acp, X_train_rej, mode='up', seed = seed_number))
-    # models_dict.update(
-    #     ri.augmentation(X_train_acp, y_train_acp, X_train_rej, mode='down', seed = seed_number))
-    # models_dict.update(
-    #     ri.fuzzy_augmentation(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
-    # models_dict.update(
-    #     ri.extrapolation(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
-    # models_dict.update(
-    #     ri.parcelling(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
-    # models_dict.update(
-    #     ri.label_spreading(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
+    models_dict.update(
+        ri.augmentation(X_train_acp, y_train_acp, X_train_rej, mode='up', seed = seed_number))
+    models_dict.update(
+        ri.augmentation(X_train_acp, y_train_acp, X_train_rej, mode='down', seed = seed_number))
+    models_dict.update(
+        ri.fuzzy_augmentation(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
+    models_dict.update(
+        ri.extrapolation(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
+    models_dict.update(
+        ri.parcelling(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
+    models_dict.update(
+        ri.label_spreading(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
     if run:
         models_dict.update(
             ri.trusted_non_outliers(X_train_acp, y_train_acp, X_train_rej,
-                                    X_val_acp, y_val_acp, iterations=5,p = 0.07, output=-1,
+                                    X_val_acp, y_val_acp, iterations=n_iterations,p = p_value, output=-1,
                                     seed=seed_number, technique='extrapolation'))
         models_dict.update(
             ri.trusted_non_outliers(X_train_acp, y_train_acp, X_train_rej,
-                                    X_val_acp, y_val_acp, iterations=5,p = 0.07, output=-1,
+                                    X_val_acp, y_val_acp, iterations=n_iterations,p = p_value, output=-1,
                                     seed=seed_number, technique='LS'))
             
     hist_dict[fold_number] = models_dict
         # metrics_dict[fold_number] = ri.get_metrics_RI(models_dict, X_test_acp, y_test_acp, X_val_acp, y_val_acp, X_test_rej)
     print(fold_number)
     # break
+
+
+# #save data
+
+filepath = Path(os.path.join(ri_datasets_path,f'DATA-{main_seed}.joblib'))
+filepath.parent.mkdir(parents=True, exist_ok=True)
+joblib.dump(data_dict, filepath)
+
+
+#save models
+
+filepath = Path(os.path.join(ri_datasets_path,f'models-{main_seed}.joblib'))
+filepath.parent.mkdir(parents=True, exist_ok=True)
+joblib.dump(hist_dict, filepath)
+
 
 
 # %%
@@ -172,13 +187,14 @@ seed_number = main_seed
 # %%
 
 # %%
-hist_kick = []
+hist_kick = {}
 
 kf = KFold(n_splits=N_splits, random_state=main_seed, shuffle = True)   #80-20 split for train-test
 
+low_AR = 3
+high_AR = 97
 
-
-for i in range(40,45):
+for i in range(low_AR,high_AR):
     AR = i/100.
     metrics_dict = {}
     for fold_number in range(N_splits):
@@ -193,7 +209,8 @@ for i in range(40,45):
         datasets_ex = joblib.load(filepath_ex)
         datasets_ls = joblib.load(filepath_ls)
 
-        def evaluate_best_it(dsets, X_val_acp, y_val_acp, X_val_rej, AR):
+        weights = [1,10]
+        def evaluate_best_it(dsets, X_val_acp, y_val_acp, X_val_rej, AR, w):
             values = []
 
             for it in list(dsets.keys()):
@@ -201,9 +218,9 @@ for i in range(40,45):
                 kick_value = ri.calculate_kickout_metric(dsets['BM'], dsets[it], X_val_acp, y_val_acp, X_val_rej, acp_rate=AR)[0]
                 it_values = [auc_value, kick_value]
                 values.append(it_values)
-
+            weights = w
             values = np.array(values)
-            weights = [1,10]
+            
             criterias = np.array([True, True])
             t = top.Topsis(values, weights, criterias)
             t.calc()
@@ -212,59 +229,84 @@ for i in range(40,45):
             return output
         
         output_ex = evaluate_best_it(datasets_ex, X_val_acp, y_val_acp, X_val_rej, AR)
+        print(f'--------{fold_number}--------')
         output_ls = evaluate_best_it(datasets_ls, X_val_acp, y_val_acp, X_val_rej, AR)
 
-        hist_dict[fold_number]['TN'] = datasets_ex[f'TN_{output_ex}']
-        hist_dict[fold_number]['TN+'] = datasets_ls[f'TN_{output_ls}']
-
+        if output_ex != 0:
+            hist_dict[fold_number]['TN'] = datasets_ex[f'TN_{output_ex}']
+        else:
+            hist_dict[fold_number]['TN'] = datasets_ex['BM']
+        
+        if output_ls != 0:
+            hist_dict[fold_number]['TN+'] = datasets_ls[f'TN_{output_ls}']
+        else:
+            hist_dict[fold_number]['TN+'] = output_ls['BM']
+        
 
         metrics_dict[fold_number] = ri.get_metrics_RI(hist_dict[fold_number], X_test_acp, y_test_acp, X_unl = X_test_rej,
                                                     acp_rate=AR, threshold_type='none')
     # break
     mean_metrics = sum([metrics_dict[i] for i in range(N_splits)])/N_splits
-    hist_kick.append(mean_metrics.loc[['Kickout']])
+    hist_kick[AR] = mean_metrics.loc[['Kickout']]
 
     # break
 
 # %%
+print(hist_kick)
 # %%
 df_kick = pd.concat(hist_kick, axis=0)
 
-filepath = Path(os.path.join(ri_datasets_path,f'DATA-{main_seed}.joblib'))
+#save models
+
+filepath = Path(os.path.join(ri_datasets_path,f'kickout-{main_seed}.joblib'))
 filepath.parent.mkdir(parents=True, exist_ok=True)
-joblib.dump(data_dict, filepath)
+joblib.dump(df_kick, filepath)
+
+param_exec = {
+    'low_AR' : low_AR,
+    'high_AR' : high_AR,
+    'weights' : weights,
+    'iterations' : n_iterations,
+    'p' : p_value,
+    'N_splits' : N_splits,
+    'main_seed' : main_seed,
+}
+
+filepath = Path(os.path.join(ri_datasets_path,f'params-{main_seed}.joblib'))
+filepath.parent.mkdir(parents=True, exist_ok=True)
+joblib.dump(param_exec, filepath)
 
 
+# num_plots = len(df_kick.columns)
+# num_cols = math.ceil(math.sqrt(num_plots))
+# num_rows = math.ceil(num_plots / num_cols)
 
+# fig, axs = plt.subplots(num_rows, num_cols, figsize=(12, 8))
 
-num_plots = len(df_kick.columns)
-num_cols = math.ceil(math.sqrt(num_plots))
-num_rows = math.ceil(num_plots / num_cols)
+# for i, column_name in enumerate(df_kick.columns):
+#     column_data = df_kick[column_name]
+#     row = i // num_cols
+#     col = i % num_cols
 
-fig, axs = plt.subplots(num_rows, num_cols, figsize=(12, 8))
+#     axs[row, col].plot(df_kick['TN'].values, label='TN')
+#     # axs[row, col].plot(df_kick['TN+'].values, label='TN+')
+#     axs[row, col].plot(column_data.values, label=column_name)
+#     axs[row, col].set_xlabel('Acceptance Rate')
+#     axs[row, col].set_ylabel('Kickout value')
+#     axs[row, col].legend(loc='lower center')
 
-for i, column_name in enumerate(df_kick.columns):
-    column_data = df_kick[column_name]
-    row = i // num_cols
-    col = i % num_cols
+# # Hide unused subplots
+# for i in range(num_plots, num_rows * num_cols):
+#     row = i // num_cols
+#     col = i % num_cols
+#     if num_rows == 1 and num_cols == 1:
+#         axs.axis('off')
+#     else:
+#         axs[row, col].axis('off')
 
-    axs[row, col].plot(df_kick['TN'].values, label='TN')
-    axs[row, col].plot(column_data.values, label=column_name)
-    axs[row, col].set_xlabel('Acceptance Rate')
-    axs[row, col].set_ylabel('Kickout value')
-    axs[row, col].legend(loc='lower center')
+# plt.tight_layout()
 
-# Hide unused subplots
-for i in range(num_plots, num_rows * num_cols):
-    row = i // num_cols
-    col = i % num_cols
-    if num_rows == 1 and num_cols == 1:
-        axs.axis('off')
-    else:
-        axs[row, col].axis('off')
-
-plt.tight_layout()
-plt.savefig(f'all_kick_by_AR_{main_seed}',  dpi=150)
+# plt.savefig(f'all_kick_by_AR_{main_seed}',  dpi=150)
 
 
 
