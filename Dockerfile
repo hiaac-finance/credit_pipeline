@@ -32,7 +32,7 @@ RUN pip3 install --upgrade pip
 # Install python packages
 RUN pip install numpy \
     matplotlib \
-    pandas \
+    pandas=2.0.3 \
     numpy \
     seaborn \
     tensorflow \
