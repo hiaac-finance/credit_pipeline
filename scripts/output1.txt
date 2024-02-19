@@ -1,7 +1,0 @@
-2024-02-16 16:49:59 - DEBUG - hello worldhello worldhello worldhello worldhello worldhello worldhello worldhello worldhello worldhello world
-2024-02-16 16:49:59 - ERROR - An error occurred.
-Traceback (most recent call last):
-  File "/work/athyrson/credit_pipeline/scripts/test-stdout.py", line 15, in <module>
-    if 0/0 == 1:
-ZeroDivisionError: division by zero
-2024-02-16 16:49:59 - DEBUG - 4
