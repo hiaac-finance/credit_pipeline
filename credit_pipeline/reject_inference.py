@@ -84,10 +84,10 @@ params_dict = {
             'random_state': seed_number,'max_iter': 1000, },
 
     'LabelSpreading_1' : {'alpha': 0.9212289329319412, 'gamma': 0.024244533484333246,
-                        'kernel': 'knn', 'max_iter': 50, 'n_jobs': None,
+                        'kernel': 'knn', 'max_iter': 50, 'n_jobs': -1,
                           'n_neighbors': 10, 'tol': 0.001, },
     'LabelSpreading_2' : {'alpha': 0.2, 'gamma': 20,
-                        'kernel': 'knn', 'max_iter': 30, 'n_jobs': None,
+                        'kernel': 'knn', 'max_iter': 30, 'n_jobs': -1,
                           'n_neighbors': 7, 'tol': 0.001,},
 
     }
@@ -128,6 +128,8 @@ cols_RI = ['AMT_CREDIT', 'EXT_SOURCE_1', 'EXT_SOURCE_2',
 def fit_policy(dataset, eval_size=0.2, random_state=880, show_eval_results = False):
     df_train, df_policy = train_test_split(
         dataset, test_size=0.2, random_state=random_state)
+    
+    print('ok')
     
     X_pol = df_policy.loc[:, cherry_cols]
     y_pol = df_policy["TARGET"]
