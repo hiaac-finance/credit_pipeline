@@ -1,4 +1,4 @@
-FROM ubuntu:18.04
+FROM ubuntu:22.04
 
 ARG OUTSIDE_GID
 ARG OUTSIDE_UID
@@ -17,7 +17,6 @@ RUN apt-get update
 
 RUN apt-get install -y \
     python3-pip \
-    # python3-tk \
     apt-utils \
     vim \
     git \
