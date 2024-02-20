@@ -27,10 +27,10 @@ MODEL_CLASS_LIST = [
     LGBMClassifier,
 ]
 FAIRNESS_CLASS_LIST = [
-    # "Reweighing",
-    # "DemographicParityClassifier",
-    # "EqualOpportunityClassifier",
-    # "FairGBMClassifier",
+    "Reweighing",
+    "DemographicParityClassifier",
+    "EqualOpportunityClassifier",
+    "FairGBMClassifier",
     "ThresholdOptimizer",
 ]
 
