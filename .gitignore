@@ -114,3 +114,7 @@ results/
 # submodules
 
 submodules/
+
+# athyrson
+athyrson/
+scripts/athyrson/
