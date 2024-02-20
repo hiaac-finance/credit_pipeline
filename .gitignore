@@ -117,4 +117,7 @@ submodules/
 
 # athyrson
 athyrson/
-scripts/athyrson/
+scripts/athyrson/topsis_python/
+
+# virtual envis
+playground_credit/
