@@ -48,12 +48,26 @@ RUN pip install numpy \
     scikit-lego[cvxpy] \
     fairlearn
 
+# Install jupyter
+RUN pip install jupyter \
+    jupyterlab  \
+    notebook
+
 
 
 # docker build -t credit:$USER -f Dockerfile --build-arg OUTSIDE_GROUP=`/usr/bin/id -ng $USER` --build-arg OUTSIDE_GID=`/usr/bin/id -g $USER` --build-arg OUTSIDE_USER=$USER --build-arg OUTSIDE_UID=$UID .
 
-
+# Without jupyter:
 # docker run -it --userns=host --name credit -v /work/$USER:/work/$USER credit:$USER  /bin/bash
 
+# With jupyter:
+# docker run -it --userns=host --name credit -v /work/$USER:/work/$USER -p 30001:30001 credit:$USER  /bin/bash
+
+# Install credit_pipeline inside the container
+
+# To enter the container as non-root:
 # docker exec -ti -u $USER credit bash
+
+# To run jupyter:
+# jupyter-lab --port 30001 --ip 0.0.0.0 
 
