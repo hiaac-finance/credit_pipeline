@@ -47,9 +47,9 @@ sys.path.append("../")
 
 from submodules.topsis_python import topsis as top
 
-main_seed = 778888
+main_seed = 123456
 
-logpath = Path(os.path.join(ri_datasets_path,f'Exp_{main_seed}/log.txt'))
+logpath = Path(os.path.join(ri_datasets_path,f'Exp_{main_seed}/logdata.txt'))
 logpath.parent.mkdir(parents=True, exist_ok=True)
 
 
