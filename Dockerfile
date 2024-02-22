@@ -131,3 +131,7 @@ RUN pip install jupyter \
 # # docker exec -ti -u $USER credit /bin/bash
 
 # # docker attach credit
+
+# docker run -it -u $(id -u):$(id -g) --userns=host --name ri_credit -v /home/athyrson.ribeiro/:/home/athyrson.ribeiro -v /work/athyrson.ribeiro:/work/athyrson.ribeiro credit:athyrson.ribeiro 
+
+

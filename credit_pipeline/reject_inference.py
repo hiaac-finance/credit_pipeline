@@ -31,7 +31,7 @@ params_dict = {
                         'criterion': 'entropy', 'max_depth': 10, 'max_features': 'log2',
                         'max_leaf_nodes': None, 'max_samples': None, 'min_impurity_decrease': 0.0,
                         'min_samples_leaf': 9, 'min_samples_split': 10, 'min_weight_fraction_leaf': 0.0,
-                        'n_estimators': 173, 'n_jobs': None, 'oob_score': False, 'random_state': seed_number,
+                        'n_estimators': 173, 'n_jobs': -1, 'oob_score': False, 'random_state': seed_number,
                         'verbose': 0, 'warm_start': False},
 
     'RandomForest_2' : {'n_estimators': 113, 'criterion': 'entropy', 'max_depth': 9,
@@ -187,7 +187,7 @@ def calculate_kickout_metric(C1, C2, X_test_acp, y_test_acp, X_test_unl, acp_rat
     KB = A1_B.loc[indices_KB].shape[0]
 
     # Calculate the share of bad cases in A1
-    p_B = A1_B.shape[0] / A1.shape[0]
+    p_B = A1_B.shape[0] / (A1.shape[0] + 1e-8)
 
     # Calculate the number of bad cases selected by the BM model
     SB = A1_B.shape[0]
@@ -528,6 +528,7 @@ def trusted_non_outliers(X_train, y_train, X_unl,
                                 output = -1,
                                 save_log = True,
                                 technique = 'extrapolation',
+                                acp_rate = 0.5,
                                 ):
     """_summary_
 
@@ -594,11 +595,12 @@ def trusted_non_outliers(X_train, y_train, X_unl,
             dict_clfs['TN_'+str(i)] = trusted_clf
 
     if output != -1:
-        metrics_value = get_metrics_RI(dict_clfs, X_val, y_val, X_unl=X_unl, threshold_type='none')
+        metrics_value = get_metrics_RI(dict_clfs, X_val, y_val, X_unl=X_unl,
+                                        threshold_type='none', acp_rate=acp_rate)
 
-        values = metrics_value.loc[["Overall AUC", "KS", "Kickout"]].T.to_numpy()
-        weights = [1,1,1]
-        criterias = np.array([True, True, True])
+        values = metrics_value.loc[["Overall AUC", "Kickout"]].T.to_numpy()
+        weights = [1,1]
+        criterias = np.array([True, True])
         t = top.Topsis(values, weights, criterias)
         t.calc()
         output = t.rank_to_best_similarity()[0] - 1
