@@ -1,0 +1,39 @@
+# docker build -t credit:$USER -f Dockerfile --build-arg OUTSIDE_GROUP=`/usr/bin/id -ng $USER` \
+		--build-arg OUTSIDE_GID=`/usr/bin/id -g $USER` \
+		--build-arg OUTSIDE_USER=$USER --build-arg OUTSIDE_UID=$UID .
+
+# ----------------------------------------
+
+# as not root:
+
+# Without jupyter:
+# docker run -it -u $(id -u):$(id -g) --userns=host --name ri_credit -v /home/$USER /:/home/$USER  \
+					 -v /work/$USER :/work/$USER  credit:$USER
+
+# With jupyter:
+# docker run -it -u $(id -u):$(id -g) --userns=host -p 8001:8001 --name ri_credit -v /home/$USER/:/home/$USER \
+ -v /work/$USER:/work/$USER  credit:$USER
+
+# ----------------------------------------
+
+ # as root
+
+ # docker run -it -u $(id -u):$(id -g) --userns=host --name ri_credit -v /home/$USER /:/home/$USER  \
+					 -v /work/$USER :/work/$USER  credit:$USER
+
+# With jupyter:
+# docker run -it -u $(id -u):$(id -g) --userns=host -p 8001:8001 --name ri_credit -v /home/$USER/:/home/$USER \
+ -v /work/$USER:/work/$USER  credit:$USER
+
+# ----------------------------------------
+
+# Install credit_pipeline inside the container
+# pip install -e .
+
+# ----------------------------------------
+
+# To enter the container as non-root:
+# docker exec -ti -u $USER ri_credit bash
+
+# To run jupyter:
+# jupyter-lab --port 8001 --ip 0.0.0.0 
