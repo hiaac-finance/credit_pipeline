@@ -18,11 +18,11 @@
 
  # as root
 
- # docker run -it -u $(id -u):$(id -g) --userns=host --name ri_credit -v /home/$USER /:/home/$USER  \
+ # docker run -it -u root --userns=host --name ri_credit -v /home/$USER /:/home/$USER  \
 					 -v /work/$USER :/work/$USER  credit:$USER
 
 # With jupyter:
-# docker run -it -u $(id -u):$(id -g) --userns=host -p 8001:8001 --name ri_credit -v /home/$USER/:/home/$USER \
+# docker run -it -u root --userns=host -p 8001:8001 --name ri_credit -v /home/$USER/:/home/$USER \
  -v /work/$USER:/work/$USER  credit:$USER
 
 # ----------------------------------------
@@ -35,5 +35,10 @@
 # To enter the container as non-root:
 # docker exec -ti -u $USER ri_credit bash
 
+
+# To enter the container as root:
+# docker exec -ti -u root ri_credit bash
+
 # To run jupyter:
 # jupyter-lab --port 8001 --ip 0.0.0.0 
+
