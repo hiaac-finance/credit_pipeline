@@ -19,6 +19,8 @@ from sklearn.semi_supervised import LabelSpreading
 import credit_pipeline.training as tr
 import sys
 
+# print(sys.path)
+
 sys.path.append("../")
 
 from submodules.topsis_python import topsis as top
@@ -186,13 +188,19 @@ def calculate_kickout_metric(C1, C2, X_test_acp, y_test_acp, X_test_unl, acp_rat
     KG = A1_G.loc[indices_KG].shape[0]
     KB = A1_B.loc[indices_KB].shape[0]
 
+    if KG == 0 and KB == 0:
+        return 0, 0 ,0 
+
     # Calculate the share of bad cases in A1
-    p_B = A1_B.shape[0] / (A1.shape[0] + 1e-8)
+    p_B = (A1_B.shape[0] / A1.shape[0]) if (A1.shape[0] != 0 and A1_B.shape[0] != 0) else 1e-8
+
+    if p_B == 1e-8 and KG > 0:
+        return -1, KG , KB
 
     # Calculate the number of bad cases selected by the BM model
-    SB = A1_B.shape[0]
+    SB = A1_B.shape[0] if A1_B.shape[0] != 0 else 1e-8
+    # print('p_B, KG, KB, SB',p_B, KG, KB, SB)
 
-    # Calculate the kickout metric value
     kickout = ((KB / p_B) - (KG / (1 - p_B))) / (SB / p_B)
 
     return kickout, KG, KB
@@ -319,7 +327,7 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
                 if np.any(X_unl) and 'BM' in name_model_dict:
                     kickout, kg, kb = calculate_kickout_metric(
                         name_model_dict['BM'][0], model[0], X, y, X_unl, acp_rate)
-                    df_dict['Kickout'].append(kickout*10)
+                    df_dict['Kickout'].append(kickout)
                     df_dict['KG'].append(kg)
                     df_dict['KB'].append(kb)
             else:
@@ -334,7 +342,7 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
                         benchmark = name_model_dict["BM"]
 
                     kickout, kg, kb = calculate_kickout_metric(benchmark, model, X, y, X_unl, acp_rate)
-                    df_dict['Kickout'].append(kickout*10)
+                    df_dict['Kickout'].append(kickout)
                     df_dict['KG'].append(kg)
                     df_dict['KB'].append(kb)
         else:
