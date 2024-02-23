@@ -40,5 +40,5 @@
 # docker exec -ti -u root ri_credit bash
 
 # To run jupyter:
-# jupyter-lab --port 8001 --ip 0.0.0.0 
+# jupyter-lab --port 8001 --ip 0.0.0.0 --no-browser
 

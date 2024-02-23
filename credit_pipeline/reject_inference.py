@@ -19,7 +19,7 @@ from sklearn.semi_supervised import LabelSpreading
 import credit_pipeline.training as tr
 import sys
 
-sys.path.append("../")
+sys.path.append("/home/athyrson/HIAAC/credit_pipeline/playground_credit/lib/python3.10/site-packages")
 
 from submodules.topsis_python import topsis as top
 

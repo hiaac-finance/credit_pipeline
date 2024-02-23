@@ -22,7 +22,6 @@ cmake==3.28.1
 colorlog==6.8.2
 comm==0.2.1
 contourpy==1.2.0
--e git+https://github.com/hiaac-finance/credit_pipeline.git@63576df1ffc5cdd262bc9d59e5b7a62cfe644025#egg=credit_pipeline
 cvxpy==1.4.2
 cycler==0.12.1
 debugpy==1.8.0
