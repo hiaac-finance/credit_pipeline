@@ -18,10 +18,12 @@ from sklearn.semi_supervised import LabelSpreading
 
 import credit_pipeline.training as tr
 import sys
+import sysconfig
 
 # print(sys.path)
 
-sys.path.append("../")
+site_packages_path = sysconfig.get_paths()["purelib"]
+sys.path.append(site_packages_path)
 
 from submodules.topsis_python import topsis as top
 
