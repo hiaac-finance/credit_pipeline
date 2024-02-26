@@ -42,3 +42,9 @@
 # To run jupyter:
 # jupyter-lab --port 8001 --ip 0.0.0.0 --no-browser
 
+
+
+docker stop ri_credit &&
+ docker start ri_credit &&
+  docker exec -ti -u athyrson.ribeiro ri_credit bash &&
+   jupyter-lab --port 8001 --ip 0.0.0.0 --no-browser

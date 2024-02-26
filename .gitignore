@@ -113,11 +113,11 @@ results/
 
 # submodules
 
-submodules/
+# submodules/
 
 # athyrson
 athyrson/
-scripts/athyrson/topsis_python/
+# scripts/athyrson/topsis_python/
 
 # virtual envis
 playground_credit/
