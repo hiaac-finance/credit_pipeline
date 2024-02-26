@@ -66,6 +66,7 @@ hyperparam_spaces = {
 }
 
 
+
 class EBE(
     BaseEstimator,
     TransformerMixin,
