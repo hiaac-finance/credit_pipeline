@@ -53,7 +53,9 @@ RUN pip install jupyter \
     jupyterlab  \
     notebook
 
-
+# Install credit_pipeline inside the container
+# If is already cloned
+# RUN pip install -e /work/$OUTSIDE_USER/credit_pipeline (need to test this)
 
 # docker build -t credit:$USER -f Dockerfile --build-arg OUTSIDE_GROUP=`/usr/bin/id -ng $USER` --build-arg OUTSIDE_GID=`/usr/bin/id -g $USER` --build-arg OUTSIDE_USER=$USER --build-arg OUTSIDE_UID=$UID .
 
@@ -63,11 +65,8 @@ RUN pip install jupyter \
 # With jupyter:
 # docker run -it --userns=host --name credit -v /work/$USER:/work/$USER -p 30001:30001 credit:$USER  /bin/bash
 
-# Install credit_pipeline inside the container
-
 # To enter the container as non-root:
 # docker exec -ti -u $USER credit bash
 
 # To run jupyter:
-# jupyter-lab --port 30001 --ip 0.0.0.0 
-
+# docker exec -ti -u $USER credit bash -c "jupyter-lab --port 30001 --ip 0.0.0.0"
