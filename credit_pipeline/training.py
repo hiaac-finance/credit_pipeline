@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.impute import SimpleImputer
+from sklearn.impute import KNNImputer, SimpleImputer
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer, make_column_selector
 from sklearn.pipeline import Pipeline
@@ -157,6 +157,8 @@ def create_pipeline(
     normalize=True,
     do_EBE=True,
     crit=3,
+    do_KNN = False,
+    n_neighbors = 2,
 ):
     # def create_pipeline(X, y, classifier = None, onehot = True, onehotdrop = False,
     #                 normalize = True, do_EBE = False, crit = 3, identify_columns = True,
@@ -186,20 +188,30 @@ def create_pipeline(
         do_ebe_cols, dont_ebe_cols = [], cat_cols
 
     # 1 Fill NaNs
+        
+    knn_nan_fill_transformer = Pipeline(
+        [("imputer", KNNImputer(n_neighbors=n_neighbors))]
+    )
     numeric_nan_fill_transformer = Pipeline(
         [("imputer", SimpleImputer(strategy="mean"))]
     )
     categorical_nan_fill_transformer = Pipeline(
         [("imputer", SimpleImputer(strategy="most_frequent"))]
     )
-    fill_pipe = ColumnTransformer(
-        transformers=[
-            ("num", numeric_nan_fill_transformer, num_cols),
-            ("cat", categorical_nan_fill_transformer, cat_cols),
-            ("ebe", categorical_nan_fill_transformer, ebe_cols),
-        ],
-        verbose_feature_names_out=False,
-    )
+    if do_KNN:
+        fill_pipe = ColumnTransformer(
+            transformers=[
+                ("knn", knn_nan_fill_transformer, X.columns),
+            ],
+        verbose_feature_names_out=False,)
+    else:
+        fill_pipe = ColumnTransformer(
+            transformers=[
+                ("num", numeric_nan_fill_transformer, num_cols),
+                ("cat", categorical_nan_fill_transformer, cat_cols),
+                ("ebe", categorical_nan_fill_transformer, ebe_cols),
+            ],
+            verbose_feature_names_out=False,)
     fill_pipe.set_output(transform="pandas")
 
     #2: Ordinal encoder
@@ -262,15 +274,26 @@ def create_pipeline(
     onehot_pipe.set_output(transform="pandas")
 
     # Combine all the transformers in a single pipeline
-    pipeline = Pipeline(
-        steps=[
-            ("fill", fill_pipe),
-            ("le", encoder_pipe),
-            ("ss", scaling_pipe if normalize else None),
-            ("hot", onehot_pipe if onehot else None),
-            ("classifier", classifier),
-        ],
-    )
+    if do_KNN:
+        pipeline = Pipeline(
+            steps=[
+                ("le", encoder_pipe),
+                ("fill", fill_pipe),
+                ("ss", scaling_pipe if normalize else None),
+                ("hot", onehot_pipe if onehot else None),
+                ("classifier", classifier),
+            ],
+        )
+    else:
+        pipeline = Pipeline(
+            steps=[
+                ("fill", fill_pipe),
+                ("le", encoder_pipe),
+                ("ss", scaling_pipe if normalize else None),
+                ("hot", onehot_pipe if onehot else None),
+                ("classifier", classifier),
+            ],
+        )
 
     return pipeline
 
