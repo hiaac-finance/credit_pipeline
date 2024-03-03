@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 from lightgbm import LGBMClassifier
@@ -29,6 +30,18 @@ from submodules.topsis_python import topsis as top
 
 ri_datasets_path = "../data/riData/"
 seed_number = 880
+
+logpath = Path(os.path.join(ri_datasets_path,f'log_RI.txt'))
+logpath.parent.mkdir(parents=True, exist_ok=True)
+
+
+# Configure logging to file
+logging.basicConfig(filename=logpath, 
+                    filemode='w',  # Overwrite the file each time the application runs
+                    level=logging.DEBUG,  # Capture all levels of logging
+                    format='%(asctime)s - %(levelname)s - %(message)s',  # Include timestamp, log level, and message
+                    datefmt='%Y-%m-%d %H:%M:%S')  # Format for the timestamp
+
 
 params_dict = {
     'RandomForest_1' : {'bootstrap': True, 'ccp_alpha': 0.0, 'class_weight': None,
@@ -207,6 +220,59 @@ def calculate_kickout_metric(C1, C2, X_test_acp, y_test_acp, X_test_unl, acp_rat
 
     return kickout, KG, KB
 
+def pre_kickout(C1, C2, X_test_acp, X_test_unl):
+    y_prob_acp = C1.predict_proba(X_test_acp)[:, 1]
+    X_test_holdout = pd.concat([X_test_acp, X_test_unl])
+    y_prob_all = C2.predict_proba(X_test_holdout)[:, 1]
+
+    y_prob_acp = pd.Series(y_prob_acp, index=X_test_acp.index)
+    y_prob_all = pd.Series(y_prob_all, index=X_test_holdout.index)
+    return y_prob_acp, y_prob_all
+
+
+def faster_kickout(y_test_acp, y_prob_acp, y_prob_all, acp_rate = 0.5):
+    # Calculate predictions and obtain subsets A1_G and A1_B
+    num_acp_1 = int(len(y_prob_acp) * acp_rate) #number of Accepts
+    threshold = np.percentile(y_prob_acp, 100 - (num_acp_1 / len(y_prob_acp)) * 100)
+    y_pred_acp = (y_prob_acp > threshold).astype('int')
+    A1 = y_prob_acp[y_pred_acp == 0]
+    A1_G = y_prob_acp[(y_pred_acp == 0) & (y_test_acp == 0)]
+    A1_B = y_prob_acp[(y_pred_acp == 0) & (y_test_acp == 1)]
+
+    # X_test_holdout = pd.concat([X_test_acp, X_test_unl])
+
+    # Calculate predictions on X_test_holdout and obtain subset A2
+    num_Acp_2 = int(len(y_prob_all) * acp_rate) #number of Accepts
+    threshold = np.percentile(y_prob_all, 100 - (num_Acp_2 / len(y_prob_all)) * 100)
+    y_pred_all = (y_prob_all > threshold).astype('int')
+    A2 = y_prob_all[y_pred_all == 0]
+
+    # Calculate indices of kicked-out good and bad samples
+    indices_KG = np.setdiff1d(A1_G.index, A2.index)
+    indices_KB = np.setdiff1d(A1_B.index, A2.index)
+
+    # Calculate the count of kicked-out good and bad samples
+    KG = A1_G.loc[indices_KG].shape[0]
+    KB = A1_B.loc[indices_KB].shape[0]
+
+    if KG == 0 and KB == 0:
+        return 0, 0 ,0 
+
+    # Calculate the share of bad cases in A1
+    p_B = (A1_B.shape[0] / A1.shape[0]) if (A1.shape[0] != 0 and A1_B.shape[0] != 0) else 1e-8
+
+    if p_B == 1e-8 and KG > 0:
+        return -1, KG , KB
+
+    # Calculate the number of bad cases selected by the BM model
+    SB = A1_B.shape[0] if A1_B.shape[0] != 0 else 1e-8
+    # print('p_B, KG, KB, SB',p_B, KG, KB, SB)
+
+    kickout = ((KB / p_B) - (KG / (1 - p_B))) / (SB / p_B)
+
+    return kickout, KG, KB
+
+
 def risk_score_threshold(model, X, y, plot = False, defaul_acceped = 0.04):
     #calculate probabilities on validation set
     y_probs = model.predict_proba(X)[:,1]
@@ -361,6 +427,10 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
                 df_dict['KB'].append(0)
 
     metrics_df = pd.DataFrame.from_dict(df_dict, orient="index", columns=models_dict.keys())
+
+    # for name, value in locals().items():
+    #     logging.debug(f"{name}: {value}")
+
     return metrics_df
 
 
@@ -377,7 +447,7 @@ def expand_dataset(X_train, y_train, X_unl,
     params_dict['LightGBM_2'].update({'random_state': seed})
 
     if X_unl.shape[0] < 1:
-        return X_train, y_train, X_unl
+        return X_train, y_train, X_unl, False
 
     iso_params = {"contamination":contamination_threshold, "random_state":seed}
 
@@ -394,10 +464,55 @@ def expand_dataset(X_train, y_train, X_unl,
         unl_scores = iso.predict(X_unl)
         X_retrieved = X_unl[unl_scores == 1]
         n_non_out = X_retrieved.shape[0]
-        # print(n_non_out/X_unl.shape[0])
+        # print(f'%inliers for {number} = {n_non_out/X_unl.shape[0]}')
 
         if n_non_out < 1:
             return X_retrieved.iloc[[]], pd.Series([]), False
+        # Label the non-outliers based on the train set
+        y_ret_prob = rotulator.predict_proba(X_retrieved)[:, 1]
+        y_labels = pd.Series((y_ret_prob >= 0.5).astype('int'), index=X_retrieved.index)
+        y_retrieved = pd.Series(y_ret_prob, index=X_retrieved.index)
+        
+        # y_aux = np.full(n_non_out, number)
+        # y_retrieved = y_retrieved[y_retrieved == y_aux]
+
+        # # Return empty dataframes if size is 0
+        # if size == 0:
+        #     return X_retrieved.iloc[[]], y_retrieved.iloc[[]]    
+
+        # Only add the most confident predictions to the new training set
+        size = size if size < len(y_retrieved) else int(len(y_retrieved)/2)
+
+        if number == 0:
+            # Get indices of lowest probabilities of defaulting
+            confident_indices = np.argpartition(y_retrieved, size)[:size]
+
+        elif number == 1:
+           # Get indices of highest probabilities of defaulting
+            confident_indices = np.argpartition(y_retrieved, -1*size)[-1*size:]
+ 
+        X_retrieved = X_retrieved.iloc[confident_indices]
+        y_labels = y_labels.iloc[confident_indices]
+
+        X_retrieved = X_retrieved[y_labels == number]
+        y_retrieved = y_labels[y_labels == number]
+        # print(y_retrieved.shape[0])
+
+        return X_retrieved, y_retrieved, True
+    
+    def retrieve_confident_samples_2(number, size):
+        # Fits outlier detection based on bad payers on the train set
+        # iso = tr.create_pipeline(X_train[y_train == number], y_train[y_train == number],
+        #                                         IsolationForest(**iso_params), do_EBE=True, crit = 0)
+        # iso.fit(X_train[y_train == number], y_train[y_train == number])
+        # # Retrieve the samples marked as non-outliers for training
+        # unl_scores = iso.predict(X_unl)
+        X_retrieved = X_unl.copy()#[unl_scores == 1]
+        # n_non_out = X_retrieved.shape[0]
+        # print(f'%inliers for {number} = {n_non_out/X_unl.shape[0]}')
+
+        # if n_non_out < 1:
+        #     return X_retrieved.iloc[[]], pd.Series([]), False
         # Label the non-outliers based on the train set
         y_ret_prob = rotulator.predict_proba(X_retrieved)[:, 1]
         y_labels = pd.Series((y_ret_prob >= 0.5).astype('int'), index=X_retrieved.index)
@@ -492,7 +607,7 @@ def create_datasets_with_ri(X_train, y_train, X_unl,
     unl_list = [X_unl]
     log_dict = {}
 
-    updated_X_train, updated_y_train, updated_X_unl =  X_train, y_train, X_unl
+    updated_X_train, updated_y_train, updated_X_unl =  X_train.copy(), y_train.copy(), X_unl.copy()
     flag = True
 
     for i in range(iterations):
@@ -511,7 +626,7 @@ def create_datasets_with_ri(X_train, y_train, X_unl,
                                                 rot_class, rot_params, seed,
                                                 )
         if flag == False:
-            print(i, updated_y_train.shape)
+            print(f'iteration -{i} adds {updated_y_train.shape[0] - y_train.shape[0]} samples')
             break
         X_train_list.append(updated_X_train)
         y_train_list.append(updated_y_train)
@@ -581,15 +696,15 @@ def trusted_non_outliers(X_train, y_train, X_unl,
     clf_params.update({'random_state': seed})
 
     datasets = create_datasets_with_ri(X_train, y_train, X_unl,
-                                iterations,
-                                contamination_threshold,
-                                size,
-                                p,
-                                rot_class,
-                                rot_params,
-                                seed,
-                                verbose,
-                                technique)
+                                iterations = iterations,
+                                contamination_threshold = contamination_threshold,
+                                size = size,
+                                p = p,
+                                rot_class = rot_class,
+                                rot_params = rot_params,
+                                seed = seed,
+                                verbose = verbose,
+                                technique = technique)
     dict_clfs = {}
     sus_iters = len(datasets["X"])
     for i in range(sus_iters):
@@ -607,8 +722,10 @@ def trusted_non_outliers(X_train, y_train, X_unl,
     if output != -1:
         metrics_value = get_metrics_RI(dict_clfs, X_val, y_val, X_unl=X_unl,
                                         threshold_type='none', acp_rate=acp_rate)
+        # print(metrics_value)
 
         values = metrics_value.loc[["Overall AUC", "Kickout"]].T.to_numpy()
+        values = values[1:]
         weights = [1,1]
         criterias = np.array([True, True])
         t = top.Topsis(values, weights, criterias)
@@ -632,7 +749,6 @@ def trusted_non_outliers(X_train, y_train, X_unl,
 
     if technique == 'LS':
         return {'TN+': trusted_clf}
-    
     return {'TN': trusted_clf}
 
 
@@ -710,6 +826,7 @@ def augmentation(X_train, y_train, X_unl, mode = 'up', seed = seed_number):
         _description_, by default 'up'
     """
     params_dict['LightGBM_2'].update({'random_state': seed})
+    # params_dict['LG_balanced'].update({'random_state': seed})
     #--------------Get Data----------------
     #Create dataset based on Approved(1)/Decline(0) condition
     X_aug_train = pd.concat([X_train, X_unl])
@@ -721,6 +838,7 @@ def augmentation(X_train, y_train, X_unl, mode = 'up', seed = seed_number):
     y_aug_train = pd.Series(np.concatenate([train_y, unl_y]), index = X_aug_train.index)
 
     #--------------Get Weights----------------
+    # weight_classifier = tr.create_pipeline(X_aug_train, y_aug_train, LGBMClassifier(**params_dict['LightGBM_2']))
     weight_classifier = tr.create_pipeline(X_aug_train, y_aug_train, LGBMClassifier(**params_dict['LightGBM_2']))
     weight_classifier.fit(X_aug_train, y_aug_train)
 
@@ -732,7 +850,6 @@ def augmentation(X_train, y_train, X_unl, mode = 'up', seed = seed_number):
 
     #Downward: ŵ = w * (1 - p(A))
     acp_weights_down = 1 * (1 - weights[:X_train.shape[0]])
-
     ##--------------Fit classifier----------------
     if mode == 'up':
         augmentation_classifier_up = tr.create_pipeline(X_train, y_train, LGBMClassifier(**params_dict['LightGBM_2']))
@@ -743,7 +860,7 @@ def augmentation(X_train, y_train, X_unl, mode = 'up', seed = seed_number):
         augmentation_classifier_down = tr.create_pipeline(X_train, y_train, LGBMClassifier(**params_dict['LightGBM_2']))
         augmentation_classifier_down.fit(X_train, y_train, classifier__sample_weight = acp_weights_down)
 
-        return {'A-DW': augmentation_classifier_down}
+        return {'A-DW': augmentation_classifier_down}#, acp_weights_down,  weights[:X_train.shape[0]], weights]}
 
 def fuzzy_augmentation(X_train, y_train, X_unl, seed = seed_number):
     """[Fuzzy-Parcelling](Anderson, 2022)
@@ -753,7 +870,7 @@ def fuzzy_augmentation(X_train, y_train, X_unl, seed = seed_number):
     X_train : _type_
         _description_
     y_train : _type_
-        _description_
+        _description_w
     X_unl : _type_
         _description_
     """
@@ -927,9 +1044,6 @@ def label_spreading(X_train, y_train, X_unl, return_labels = False, seed = seed_
     y_unl_ls = np.array([-1]*X_unl_ls.shape[0])
     y_combined = np.concatenate([y_train_ls.array, y_unl_ls])
     y_combined = pd.Series(y_combined, index=X_combined.index)
-
-    n_labeled_points = y_train_ls.shape[0]
-    indices = np.arange(y_combined.shape[0])
 
     #--------------Predict labels on the unlabeled data---------------
     lp_model = tr.create_pipeline(X_combined, y_combined, LabelSpreading(**params_dict['LabelSpreading_2']))
