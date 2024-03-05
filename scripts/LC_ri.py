@@ -54,9 +54,6 @@ from submodules.topsis_python import topsis as top
 
 import wandb
 
-wandb.login()
-wandb.errors.term._show_warnings = False
-
 def script():
     parser = argparse.ArgumentParser(description='Simple Script')
     parser.add_argument('--seed', type=int, default=0, help='Seed number')
@@ -68,7 +65,10 @@ def script():
     weights = [1,1]
     criterias = np.array([True, True])
 
-# %%
+    if args.wandb:
+        wandb.login()
+        wandb.errors.term._show_warnings = False
+
     # %%
     #@title Set seed
 
@@ -451,7 +451,9 @@ def script():
         return output_dict
 
     output_ex = evaluate_best_it(models_ex, X_val, y_val, R_val, low_AR, high_AR, weights, criterias)
+    logging.debug("Extrapolation Mode Analized")
     output_ls = evaluate_best_it(models_ls, X_val, y_val, R_val, low_AR, high_AR, weights, criterias)
+    logging.debug("Label Spreading Mode Analized")
 
     models_dict_ex = {'BM': models_ex['BM']}
     models_dict_ls = {'BM': models_ls['BM']}
@@ -511,6 +513,8 @@ def script():
     filepath.parent.mkdir(parents=True, exist_ok=True)
     tdf.round(4).to_csv(filepath, index=True)
 
+    logging.debug(f'Saved Kickout_ex/Exp_{main_seed}.csv')
+
     TN_plus_dict = {}
     for it in models_ls.keys():
         # Generate predictions for model 'BM' and current model 'it'
@@ -532,7 +536,8 @@ def script():
     filepath = Path(os.path.join(ri_datasets_path,f'Kickout_ls/Exp_{main_seed}.csv'))
     filepath.parent.mkdir(parents=True, exist_ok=True)
     tpdf.round(4).to_csv(filepath, index=True)
-
+    
+    logging.debug(f'Saved Kickout_ls/Exp_{main_seed}.csv')
 
 if __name__ == "__main__":
     script()
