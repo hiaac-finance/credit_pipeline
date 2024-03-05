@@ -118,6 +118,9 @@ results/
 # athyrson
 athyrson/
 # scripts/athyrson/topsis_python/
+scripts/Config/
+scripts/wandb/
+wandb/
 
 # virtual envis
 playground_credit/
