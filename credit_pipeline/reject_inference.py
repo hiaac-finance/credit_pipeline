@@ -751,6 +751,110 @@ def trusted_non_outliers(X_train, y_train, X_unl,
         return {'TN+': trusted_clf}
     return {'TN': trusted_clf}
 
+def evaluate_best_it(models, X_val, y_val, R_val, low_AR, high_AR, weights, criterias):
+    """
+    Evaluate the best iteration for different AR (Acceptance Rate) values.
+
+    Args:
+        models (dict): A dictionary of models.
+        X_val (array-like): The validation dataset.
+        y_val (array-like): The validation labels.
+        R_val (array-like): The validation risk scores.
+        low_AR (int): The lower bound of the Acceptance Rate range.
+        high_AR (int): The upper bound of the Acceptance Rate range.
+        weights (array-like): The weights for each criterion.
+        criterias (array-like): The criteria for evaluation.
+
+    Returns:
+        dict: A dictionary containing the best iteration for each AR value.
+
+    """
+    output_dict = {}
+    values = []
+
+    # Iterate over each model in the models_dict
+    for it in list(models.keys()):
+        ar_dict = {}
+        auc_value = roc_auc_score(y_val, models[it].predict_proba(X_val)[:,1])
+        p_acp, p_all = pre_kickout(models['BM'], models[it], X_val, R_val)
+        # Iterate over the range of values from low_AR to high_AR
+        for a in range(low_AR, high_AR):
+            AR = a/100
+            # Calculate kickout value
+            kick_value = faster_kickout(y_val, p_acp, p_all, acp_rate=AR)[0]
+            # Store the kickout value for the current AR value in the ar_dict
+            ar_dict[a] = kick_value
+        # Create a list containing the auc_value and the ar_dict
+        it_values = [auc_value, ar_dict]
+        # Append the it_values to the values list
+        values.append(it_values)
+        
+    values = np.array(values)
+        
+    # Iterate over the range of values from low_AR to high_AR
+    for a in range(low_AR, high_AR):
+        # Create a list of pairs containing the values from the first column of 'values' and the 'a'th element of the second column
+        values_by_ar = [[j, k] for j, k in zip(values[1:, 0], [i[a] for i in values[1:, 1]])]   
+        # Create a Topsis object with the 'values_by_ar', 'weights', and 'criterias'
+        t = top.Topsis(values_by_ar, weights, criterias)
+        # Calculate the Topsis rankings
+        t.calc()
+        # Get the rank-to-best similarity and subtract 1 to get the best iteration
+        output = t.rank_to_best_similarity()[0]
+        # Store the best iteration for the current AR value in the output_dict
+        output_dict[a] = output
+        # print(f'best iteration for AR {a}: {output} with values: {values[:,1]}')
+        # Log the best iteration for the current AR value
+        # logging.debug(f'best iteration for AR {a}: {output}')
+    return output_dict
+
+def calculate_metrics_best_model(models_dict, X_eval, y_eval, R_eval, low_AR, high_AR):
+    # in this loop we will, for each AR, calculate the metrics for the best model
+    for a in range(low_AR, high_AR):
+        AR = a/100
+        keys_to_extract = ['BM', a]
+        # sub_dict is a dict containing only the models in keys_to_extract because we only
+        # want to evaluate these models
+        sub_dict = {k: models_dict[k] for k in keys_to_extract if k in models_dict}
+        ar_df = get_metrics_RI(sub_dict, X_eval, y_eval, X_unl = R_eval, acp_rate=AR)
+
+        # this if is needed because in the first iteration we need to create the dataframes
+        if a == low_AR:
+            df = ar_df.loc[:,'BM']
+
+        # we drop because each iteration will add the BM row again
+        ar_df = ar_df.drop('BM', axis=1)
+
+        # this dataframe will contain the metrics for each model in each AR
+        # being each model the best model for the respective AR
+        df = pd.concat([df, ar_df], axis=1)
+        
+    return df
+        
+
+def calculate_kickout_by_ar(models_dict, X_eval, y_eval, R_eval, low_AR, high_AR):
+    TN_dict = {}
+    # in this loop we will, for each AR, calculate the kickout value for each model
+    for it in models_dict.keys():
+        # Generate predictions for model 'BM' and current model 'it'
+        p_acp, p_all = pre_kickout(models_dict['BM'], models_dict[it], X_eval, R_eval)
+        
+        ar_dict = {}
+        for a in range(low_AR, high_AR):
+            AR = a / 100
+            # Calculate kickout value
+            kick_value = faster_kickout(y_eval, p_acp, p_all, acp_rate=AR)[0]
+            ar_dict[AR] = kick_value
+
+    # Store the results for the current 'it'
+        TN_dict[it] = ar_dict
+
+    ARs = sorted(ar_dict.keys())
+    tdf = pd.DataFrame(TN_dict, index=ARs)
+    
+    # tdf contains the kickout values for each model in each AR
+    return tdf
+
 
 #---------Other Strategies----------
 
