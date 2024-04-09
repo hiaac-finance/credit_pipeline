@@ -10,6 +10,15 @@ import chardet
 import os
 
 
+def column_description(dataframe, column_name):
+    path =  "../data/HomeCredit/"
+    df_desc = read_csv_encoded(path,'HomeCredit_columns_description.csv')
+    #Create dataframe with columns and descriptions
+    descriptions = df_desc.query("Table == 'application_{train|test}.csv'")[['Row','Description']].T
+    desc = (descriptions.iloc[:,dataframe.columns == column_name].values)
+    return f'Description of {column_name}: {desc[1][0]}\n'
+
+
 def read_csv_encoded(path, filename):
     """
     Reads a CSV file with automatic character encoding detection.

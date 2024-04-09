@@ -339,12 +339,12 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
     def get_metrics_df(models_dict, y_true, use_threshold):
         if use_threshold:
             metrics_dict = {
-                "Overall AUC": (
+                "AUC": (
                     lambda x: roc_auc_score(y_true, x), False),
                 "KS": (
                     lambda x: evaluate_ks(y_true, x), False),
                 # "------": (lambda x: 0, True),
-                "Balanced Accuracy": (
+                "Balanced_Accuracy": (
                     lambda x: balanced_accuracy_score(y_true, x), True),
                 "Accuracy": (
                     lambda x: accuracy_score(y_true, x), True),
@@ -358,7 +358,7 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
             }
         else:
             metrics_dict = {
-                "Overall AUC": (
+                "AUC": (
                     lambda x: roc_auc_score(y_true, x), False),
                 "KS": (
                     lambda x: evaluate_ks(y_true, x), False),
@@ -379,7 +379,7 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
     #         del df_dict["-----"]
 
     if np.any(X_v):
-        df_dict['Approval Rate'] = []
+        df_dict['Approval_Rate'] = []
     if np.any(X_unl) and 'BM' in name_model_dict:
         df_dict['Kickout'] = []
         df_dict['KG'] = []
@@ -391,7 +391,7 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
                 if np.any(X_v):
                     a_r = calculate_approval_rate(model[0], X_v, y_v, X)
                     # acp_rate = a_r
-                    df_dict['Approval Rate'].append(a_r)
+                    df_dict['Approval_Rate'].append(a_r)
                 if np.any(X_unl) and 'BM' in name_model_dict:
                     kickout, kg, kb = calculate_kickout_metric(
                         name_model_dict['BM'][0], model[0], X, y, X_unl, acp_rate)
@@ -402,7 +402,7 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
                 if np.any(X_v):
                     a_r = calculate_approval_rate(model, X_v, y_v, X)
                     # acp_rate = a_r
-                    df_dict['Approval Rate'].append(a_r)
+                    df_dict['Approval_Rate'].append(a_r)
                 if np.any(X_unl) and 'BM' in name_model_dict:
                     if isinstance(name_model_dict["BM"], list):
                         benchmark = name_model_dict["BM"][0]  # Assuming "BM" is a list
@@ -417,10 +417,10 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
             if np.any(X_v):
                 if isinstance(model,list):
                     a_r = calculate_approval_rate(model[0], X_v, y_v, X)
-                    df_dict['Approval Rate'].append(a_r)
+                    df_dict['Approval_Rate'].append(a_r)
                 else:
                     a_r = calculate_approval_rate(model, X_v, y_v, X)
-                    df_dict['Approval Rate'].append(a_r)
+                    df_dict['Approval_Rate'].append(a_r)
             if np.any(X_unl) and 'BM' in name_model_dict:
                 df_dict['Kickout'].append(0)
                 df_dict['KG'].append(0)
@@ -454,25 +454,29 @@ def expand_dataset(X_train, y_train, X_unl,
     rotulator = tr.create_pipeline(X_train, y_train, rot_class(**rot_params),
                                     onehot=True, normalize=True, do_EBE=True)
     rotulator.fit(X_train, y_train)
+    logging.debug(f"rotulator fitted")
 
     def retrieve_confident_samples(number, size):
         # Fits outlier detection based on bad payers on the train set
         iso = tr.create_pipeline(X_train[y_train == number], y_train[y_train == number],
                                                 IsolationForest(**iso_params), do_EBE=True, crit = 0)
         iso.fit(X_train[y_train == number], y_train[y_train == number])
+        logging.debug(f"iso fitted")
         # Retrieve the samples marked as non-outliers for training
         unl_scores = iso.predict(X_unl)
         X_retrieved = X_unl[unl_scores == 1]
         n_non_out = X_retrieved.shape[0]
         # print(f'%inliers for {number} = {n_non_out/X_unl.shape[0]}')
+        logging.debug(f'%inliers for {number} = {n_non_out/X_unl.shape[0]}')
 
         if n_non_out < 1:
             return X_retrieved.iloc[[]], pd.Series([]), False
+            logging.debug(f"n_non_out < 1")
         # Label the non-outliers based on the train set
         y_ret_prob = rotulator.predict_proba(X_retrieved)[:, 1]
         y_labels = pd.Series((y_ret_prob >= 0.5).astype('int'), index=X_retrieved.index)
         y_retrieved = pd.Series(y_ret_prob, index=X_retrieved.index)
-        
+        logging.debug(f"y_labels and y_retrieved created")
         # y_aux = np.full(n_non_out, number)
         # y_retrieved = y_retrieved[y_retrieved == y_aux]
 
@@ -482,20 +486,25 @@ def expand_dataset(X_train, y_train, X_unl,
 
         # Only add the most confident predictions to the new training set
         size = size if size < len(y_retrieved) else int(len(y_retrieved)/2)
+        logging.debug(f"size = {size}")
 
         if number == 0:
             # Get indices of lowest probabilities of defaulting
             confident_indices = np.argpartition(y_retrieved, size)[:size]
+            logging.debug('number == 0')
 
         elif number == 1:
            # Get indices of highest probabilities of defaulting
             confident_indices = np.argpartition(y_retrieved, -1*size)[-1*size:]
+            logging.debug('number == 1')
  
         X_retrieved = X_retrieved.iloc[confident_indices]
         y_labels = y_labels.iloc[confident_indices]
 
         X_retrieved = X_retrieved[y_labels == number]
         y_retrieved = y_labels[y_labels == number]
+        logging.debug(f"X_retrieved and y_retrieved created")
+        logging.debug(f"y_retrieved shape: {y_retrieved.shape[0]}")
         # print(y_retrieved.shape[0])
 
         return X_retrieved, y_retrieved, True
@@ -548,14 +557,18 @@ def expand_dataset(X_train, y_train, X_unl,
     #y_train.mean()
     c_0 = int(size-size*p) #number of negative (0) samples to add
     c_1 = int(size*p)      #number of positive (1) samples to add
+    logging.debug(f"c_0 = {c_0}, c_1 = {c_1}")
 
+    logging.debug(f'start retrieve_confident_samples for 0')
     X_retrieved_0, y_retrieved_0, flag_0 = retrieve_confident_samples(0, c_0)
+    logging.debug(f'start retrieve_confident_samples for 1')
     X_retrieved_1, y_retrieved_1, flag_1  = retrieve_confident_samples(1, c_1)
     # print(X_retrieved_1)
     #---------------------------------------------------------------------------
 
     intersection = X_retrieved_0.index.intersection(X_retrieved_1.index)
     if len(intersection) > 0:
+        logging.debug(f'intersection = {len(intersection)}')
         X_retrieved_0 = X_retrieved_0.drop(intersection)
         y_retrieved_0 = y_retrieved_0.drop(intersection)
 
@@ -564,8 +577,10 @@ def expand_dataset(X_train, y_train, X_unl,
 
     # Concat the datasets
     X_retrieved = pd.concat([X_retrieved_0, X_retrieved_1])
+    logging.debug(f'X_retrieved shape: {X_retrieved.shape[0]}')
  
     y_retrieved = pd.concat([y_retrieved_0, y_retrieved_1])
+    logging.debug(f'y_retrieved shape: {y_retrieved.shape[0]}')
    
     # if (y_retrieved.mean() > p + 0.3) or (y_retrieved.mean() < p - 0.3):
     #     # print(f'y retrieved mean: {y_retrieved.mean()}')
@@ -575,14 +590,17 @@ def expand_dataset(X_train, y_train, X_unl,
 
     # Keep the samples marked as outliers in the unlabeled/rejected set
     X_kept = X_unl.loc[~X_unl.index.isin(X_retrieved.index)]
+    logging.debug(f'X_kept shape: {X_kept.shape[0]}')
 
     #---------------------------------------------------------------------------
     # Add the retrieved samples to the new training dataset
     X_train_updated = pd.concat([X_train, X_retrieved])
 
     y_train_updated = pd.concat([y_train, y_retrieved])
+    logging.debug(f'y_train_updated shape: {y_train_updated.shape[0]}')
    
     # print('y_train:', y_train.mean(), 'y_retrieved:', y_retrieved.mean(), 'y_train_updated:', y_train_updated.mean())
+    logging.debug(f'y_train: {y_train.mean()}, y_retrieved: {y_retrieved.mean()}, y_train_updated: {y_train_updated.mean()}')
     y_train_updated = pd.Series(y_train_updated, index=X_train_updated.index)
 
     flag = flag_0 and flag_1    
@@ -611,26 +629,32 @@ def create_datasets_with_ri(X_train, y_train, X_unl,
     flag = True
 
     for i in range(iterations):
+        logging.debug(f"Iteration: {i}")
         if verbose:
             print("Iteration: ", i)
         if technique == 'extrapolation':
+            logging.debug(f'using extrapolation')
             updated_X_train, updated_y_train, updated_X_unl, flag = expand_dataset(
                                                 updated_X_train, updated_y_train, updated_X_unl, 
                                                 contamination_threshold, size, p, 
                                                 rot_class, rot_params, seed,
                                                 )
         elif technique == 'LS':
+            logging.debug(f'using LS')
             updated_X_train, updated_y_train, updated_X_unl, flag = expand_dataset_with_LS(
                                                 updated_X_train, updated_y_train, updated_X_unl, 
                                                 contamination_threshold, size, p, 
                                                 rot_class, rot_params, seed,
                                                 )
         if flag == False:
+            logging.debug(f'program stopped at iteration {i} due to lack of samples')
             print(f'iteration -{i} adds {updated_y_train.shape[0] - y_train.shape[0]} samples')
+            logging.debug(f'iteration -{i} adds {updated_y_train.shape[0] - y_train.shape[0]} samples')
             break
         X_train_list.append(updated_X_train)
         y_train_list.append(updated_y_train)
         unl_list.append(updated_X_unl)
+        logging.debug(f'iteration -{i} adds {updated_y_train.shape[0] - y_train.shape[0]} samples')
 
     log_dict["X"] = X_train_list
     log_dict["y"] = y_train_list
@@ -705,9 +729,12 @@ def trusted_non_outliers(X_train, y_train, X_unl,
                                 seed = seed,
                                 verbose = verbose,
                                 technique = technique)
+    logging.debug(f'datasets created')                        
     dict_clfs = {}
     sus_iters = len(datasets["X"])
+    logging.debug(f'sus_iters = {sus_iters}')
     for i in range(sus_iters):
+        logging.debug(f'iteration: {i}')
         X_train = datasets["X"][i]
         y_train = datasets["y"][i]
 
@@ -715,11 +742,14 @@ def trusted_non_outliers(X_train, y_train, X_unl,
         trusted_clf.fit(X_train, y_train)
         
         if i == 0:
+            logging.debug(f'Benchmark model')
             dict_clfs['BM'] = trusted_clf
         else:
+            logging.debug(f'Non-outliers model')
             dict_clfs['TN_'+str(i)] = trusted_clf
 
     if output != -1:
+        logging.debug(f'returning best iteration')
         metrics_value = get_metrics_RI(dict_clfs, X_val, y_val, X_unl=X_unl,
                                         threshold_type='none', acp_rate=acp_rate)
         # print(metrics_value)
@@ -730,14 +760,15 @@ def trusted_non_outliers(X_train, y_train, X_unl,
         criterias = np.array([True, True])
         t = top.Topsis(values, weights, criterias)
         t.calc()
-        output = t.rank_to_best_similarity()[0] - 1
+        output = t.rank_to_best_similarity()[0]
         print(f'best iteration: {output}')
 
 
     if save_log == True:
-        filepath = Path(os.path.join(ri_datasets_path,f'TN-{seed}.joblib'))
+        filepath = Path(os.path.join(ri_datasets_path,f'TN-{seed}-{p}.joblib'))
         if technique == 'LS':
-            filepath = Path(os.path.join(ri_datasets_path,f'TN+-{seed}.joblib'))
+            filepath = Path(os.path.join(ri_datasets_path,f'TN+-{seed}-{p}.joblib'))
+        logging.debug(f'saving log to {filepath}')
         filepath.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(dict_clfs, filepath)
     
@@ -746,36 +777,21 @@ def trusted_non_outliers(X_train, y_train, X_unl,
 
     trusted_clf = tr.create_pipeline(X_train, y_train, clf_class(**clf_params))
     trusted_clf.fit(X_train, y_train)
-
+    logging.debug(f'trusted_clf fitted')
     if technique == 'LS':
         return {'TN+': trusted_clf}
     return {'TN': trusted_clf}
 
 def evaluate_best_it(models, X_val, y_val, R_val, low_AR, high_AR, weights, criterias):
-    """
-    Evaluate the best iteration for different AR (Acceptance Rate) values.
-
-    Args:
-        models (dict): A dictionary of models.
-        X_val (array-like): The validation dataset.
-        y_val (array-like): The validation labels.
-        R_val (array-like): The validation risk scores.
-        low_AR (int): The lower bound of the Acceptance Rate range.
-        high_AR (int): The upper bound of the Acceptance Rate range.
-        weights (array-like): The weights for each criterion.
-        criterias (array-like): The criteria for evaluation.
-
-    Returns:
-        dict: A dictionary containing the best iteration for each AR value.
-
-    """
     output_dict = {}
     values = []
 
     # Iterate over each model in the models_dict
     for it in list(models.keys()):
+        logging.debug(f'evaluating model {it}')
         ar_dict = {}
         auc_value = roc_auc_score(y_val, models[it].predict_proba(X_val)[:,1])
+        logging.debug(f'auc_value: {auc_value}')
         p_acp, p_all = pre_kickout(models['BM'], models[it], X_val, R_val)
         # Iterate over the range of values from low_AR to high_AR
         for a in range(low_AR, high_AR):
@@ -790,7 +806,7 @@ def evaluate_best_it(models, X_val, y_val, R_val, low_AR, high_AR, weights, crit
         values.append(it_values)
         
     values = np.array(values)
-        
+    logging.debug(f'Iterating over ARs')    
     # Iterate over the range of values from low_AR to high_AR
     for a in range(low_AR, high_AR):
         # Create a list of pairs containing the values from the first column of 'values' and the 'a'th element of the second column
@@ -806,7 +822,9 @@ def evaluate_best_it(models, X_val, y_val, R_val, low_AR, high_AR, weights, crit
         # print(f'best iteration for AR {a}: {output} with values: {values[:,1]}')
         # Log the best iteration for the current AR value
         # logging.debug(f'best iteration for AR {a}: {output}')
+    logging.debug(f'output_dict: {output_dict}')    
     return output_dict
+
 
 def calculate_metrics_best_model(models_dict, X_eval, y_eval, R_eval, low_AR, high_AR):
     # in this loop we will, for each AR, calculate the metrics for the best model
@@ -832,10 +850,12 @@ def calculate_metrics_best_model(models_dict, X_eval, y_eval, R_eval, low_AR, hi
     return df
         
 
-def calculate_kickout_by_ar(models_dict, X_eval, y_eval, R_eval, low_AR, high_AR):
+def area_under_the_kick(models_dict, X_eval, y_eval, R_eval, low_AR, high_AR):
+    logging.debug(f'starting area_under_the_kick')
     TN_dict = {}
     # in this loop we will, for each AR, calculate the kickout value for each model
     for it in models_dict.keys():
+        logging.debug(f'evaluating model {it}')
         # Generate predictions for model 'BM' and current model 'it'
         p_acp, p_all = pre_kickout(models_dict['BM'], models_dict[it], X_eval, R_eval)
         
@@ -844,7 +864,7 @@ def calculate_kickout_by_ar(models_dict, X_eval, y_eval, R_eval, low_AR, high_AR
             AR = a / 100
             # Calculate kickout value
             kick_value = faster_kickout(y_eval, p_acp, p_all, acp_rate=AR)[0]
-            ar_dict[AR] = kick_value
+            ar_dict[a] = kick_value
 
     # Store the results for the current 'it'
         TN_dict[it] = ar_dict
@@ -854,6 +874,50 @@ def calculate_kickout_by_ar(models_dict, X_eval, y_eval, R_eval, low_AR, high_AR
     
     # tdf contains the kickout values for each model in each AR
     return tdf
+
+def evaluate_by_AUC_AUK(models, X_val, y_val, R_val, weights = [1,1], criterias = [True, True],
+                                 low_AR = 0, high_AR = 100):
+    logging.debug(f'starting evaluate_by_AUC_AUK')                             
+    values = []
+    kick_ar = area_under_the_kick(models, X_val, y_val, R_val, low_AR, high_AR).mean().round(3)
+    i = 0
+    for model in models.keys():
+        logging.debug(f'evaluating model {model}')
+        kick = kick_ar[model]
+        auc = roc_auc_score(y_val, models[model].predict_proba(X_val)[:,1]).round(3)
+        values.append([auc, kick, i])
+        i+=1
+    values = np.array(values)
+
+    t = top.Topsis(values[1:,:2], weights, criterias)
+    # Calculate the Topsis rankings
+    t.calc()
+    # Get the rank-to-best similarity and subtract 1 to get the best iteration
+    output = t.rank_to_best_similarity()[0]
+
+    logging.debug(f'output: {output}')
+    return output, values[output]
+    
+def evaluate_by_AUC_AUK_IT(models, X_val, y_val, R_val, weights = [5,5,1], criterias = [True, True, True],
+                                 low_AR = 0, high_AR = 100):
+    values = []
+    kick_ar = area_under_the_kick(models, X_val, y_val, R_val, low_AR, high_AR).mean().round(3)
+    i = 0
+    for model in models.keys():
+        kick = kick_ar[model]
+        auc = roc_auc_score(y_val, models[model].predict_proba(X_val)[:,1]).round(3)
+        values.append([auc, kick, i])
+        i+=1
+    
+    values = np.array(values)
+
+    t = top.Topsis(values[1:,:], weights, criterias)
+    # Calculate the Topsis rankings
+    t.calc()
+    # Get the rank-to-best similarity and subtract 1 to get the best iteration
+    output = t.rank_to_best_similarity()[0]+1
+
+    return output, values[output]
 
 
 #---------Other Strategies----------

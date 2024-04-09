@@ -1,3 +1,0 @@
-2024-03-01 20:41:39 - DEBUG - ../data/riData/LC_py_869279
-2024-03-01 20:41:40 - DEBUG - Starting new HTTPS connection (1): o151352.ingest.sentry.io:443
-2024-03-01 20:41:40 - DEBUG - https://o151352.ingest.sentry.io:443 "POST /api/4504800232407040/envelope/ HTTP/1.1" 200 0
