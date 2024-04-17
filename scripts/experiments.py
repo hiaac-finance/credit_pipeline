@@ -238,7 +238,7 @@ def experiment_fairness(args):
         A_test = X_test_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
 
         scorer_validation = evaluate.create_fairness_scorer(
-            FAIRNESS_GOAL[args["dataset"]], A_val
+            FAIRNESS_GOAL[args["dataset"]], A_val, benefit_class = 0
         )
 
         if "Reweighing" in FAIRNESS_CLASS_LIST:
@@ -283,7 +283,7 @@ def experiment_fairness(args):
                 model_dict = {"rw_" + model_class.__name__: [model, threshold]}
                 metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
                 fairness_metrics = evaluate.get_fairness_metrics(
-                    model_dict, X_test, Y_test, A_test
+                    model_dict, X_test, Y_test, A_test, benefit_class = 0
                 )
 
                 joblib.dump(model, f"{path}/{fold}/rw_{model_class.__name__}.pkl")
@@ -334,7 +334,7 @@ def experiment_fairness(args):
             model_dict = {model_class.__name__: [model, threshold]}
             metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
             fairness_metrics = evaluate.get_fairness_metrics(
-                model_dict, X_test, Y_test, A_test
+                model_dict, X_test, Y_test, A_test,  benefit_class = 0
             )
             joblib.dump(model, f"{path}/{fold}/{model_class.__name__}.pkl")
             joblib.dump(
@@ -373,7 +373,7 @@ def experiment_fairness(args):
             model_dict = {model_class.__name__: [model, threshold]}
             metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
             fairness_metrics = evaluate.get_fairness_metrics(
-                model_dict, X_test, Y_test, A_test
+                model_dict, X_test, Y_test, A_test,  benefit_class = 0
             )
 
             joblib.dump(model, f"{path}/{fold}/{model_class.__name__}.pkl")
@@ -426,7 +426,7 @@ def experiment_fairness(args):
             model_dict = {"thr_" + model_class.__name__: [thr_opt_helper, None]}
             metrics = evaluate.get_metrics(model_dict, X_test_preprocessed, Y_test)
             fairness_metrics = evaluate.get_fairness_metrics(
-                model_dict, X_test_preprocessed, Y_test, A_test
+                model_dict, X_test_preprocessed, Y_test, A_test,  benefit_class = 0
             )
             joblib.dump(thr_opt, f"{path}/{fold}/thr_{model_class.__name__}.pkl")
             metrics.to_csv(
