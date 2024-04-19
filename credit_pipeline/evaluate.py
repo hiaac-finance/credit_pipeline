@@ -325,24 +325,15 @@ def get_fairness_metrics(name_model_dict, X, y, z, threshold=0.5, benefit_class=
         Threshold to be used for all models, if individual thresholds are not provided, by default 0.5
     """
     models_dict = {}
-    for name, model in name_model_dict.items():
-        if type(model) == list:
-            model_ = model[0]
-        else:
-            model_ = model
-        
-        y_prob = None
-        y_pred = model_.predict(X)
-        y_pred = (y_pred == benefit_class).astype("float")
-            
-        models_dict[name] = (y_pred, y_prob)
+    for model_name, pred in name_model_dict.items():
+        models_dict[model_name] = (pred == benefit_class).astype("int") 
 
     # transform y to array if it is a pandas series
     if type(y) == pd.Series:
         y = y.values
     if type(z) == pd.Series:
         z = z.values
-    y_true = (y == benefit_class).astype("float")
+    y_true = (y == benefit_class).astype("int")
 
     def get_metrics_df(models_dict):
         metrics_dict = {
@@ -357,7 +348,7 @@ def get_fairness_metrics(name_model_dict, X, y, z, threshold=0.5, benefit_class=
         df_dict = {}
         for metric_name, metric_func in metrics_dict.items():
             df_dict[metric_name] = [
-                metric_func(preds) for (preds, _) in models_dict.values()
+                metric_func(preds) for preds in models_dict.values()
             ]
         return pd.DataFrame.from_dict(
             df_dict, orient="index", columns=models_dict.keys()
