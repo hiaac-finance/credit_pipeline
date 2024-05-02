@@ -863,7 +863,7 @@ def area_under_the_kick(models_dict, X_eval, y_eval, R_eval, low_AR, high_AR):
         for a in range(low_AR, high_AR):
             AR = a / 100
             # Calculate kickout value
-            kick_value = faster_kickout(y_eval, p_acp, p_all, acp_rate=AR)[0]
+            kick_value = faster_kickout(y_eval, p_acp, p_all, acp_rate=AR)[[0]
             ar_dict[a] = kick_value
 
     # Store the results for the current 'it'
@@ -892,8 +892,32 @@ def evaluate_by_AUC_AUK(models, X_val, y_val, R_val, weights = [1,1], criterias 
     t = top.Topsis(values[1:,:2], weights, criterias)
     # Calculate the Topsis rankings
     t.calc()
+
+
+
+
+
+
     # Get the rank-to-best similarity and subtract 1 to get the best iteration
     output = t.rank_to_best_similarity()[0]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     logging.debug(f'output: {output}')
     return output, values[output]
