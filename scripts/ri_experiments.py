@@ -45,12 +45,13 @@ import sys
 sys.path.append("../")
 from submodules.topsis_python import topsis as top
 
-seed_number = 123456
-low_AR = 3
-high_AR = 99
+seed_number = 13582
+low_AR = 0
+high_AR = 100
 weights = [1,10]
+criterias = np.array([True, True])
 n_iterations = 50
-p_value = 0.14
+p_value = 0.07
 N_splits = 5
 main_seed = seed_number
 
@@ -65,12 +66,29 @@ logging.basicConfig(filename=logpath,
                     format='%(asctime)s - %(levelname)s - %(message)s',  # Include timestamp, log level, and message
                     datefmt='%Y-%m-%d %H:%M:%S')  # Format for the timestamp
 
+# Create and configure a custom logger for detailed (DEBUG level) logging
+detailed_logger = logging.getLogger('detailed')
+detailed_logger.setLevel(logging.DEBUG)  # Set this logger to capture everything
+
+# Create a file handler for the custom logger (optional if you want all logs in the same file)
+file_handler = logging.FileHandler(logpath)
+file_handler.setLevel(logging.DEBUG)
+
+# You might want to use the same formatter for consistency
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+file_handler.setFormatter(formatter)
+
+# Add the file handler to the detailed logger
+detailed_logger.addHandler(file_handler)
+
+detailed_logger.debug(logpath)
+
 # %%
 #@title Read dataset
 df_o = pd.read_csv(path+'application_train.csv')    #HomeCredit training dataset
 
 # %%
-logging.debug(seed_number)
+detailed_logger.debug(seed_number)
 
 # %% [markdown]
 # #Params
@@ -151,13 +169,13 @@ for fold_number, (train_index, test_index) in enumerate(kf.split(df_o)):
             ri.parcelling(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
         models_dict.update(
             ri.label_spreading(X_train_acp, y_train_acp, X_train_rej, seed = seed_number))
-        if run:
-            logging.info(f"running technique extrapolation with p={p_value} for {n_iterations} iterations")
+        if run and fold_number != 0:
+            detailed_logger.info(f"running technique extrapolation with p={p_value} for {n_iterations} iterations")
             models_dict.update(
                 ri.trusted_non_outliers(X_train_acp, y_train_acp, X_train_rej,
                                         X_val_acp, y_val_acp, iterations=n_iterations,p = p_value, output=-1,
-                                        seed=seed_number, technique='extrapolation'))
-            logging.info(f"running technique label spreading with p={p_value} for {n_iterations} iterations")
+                                        seed=seed_number, technique='extrapolation'), )
+            detailed_logger.info(f"running technique label spreading with p={p_value} for {n_iterations} iterations")
             models_dict.update(
                 ri.trusted_non_outliers(X_train_acp, y_train_acp, X_train_rej,
                                         X_val_acp, y_val_acp, iterations=n_iterations,p = p_value, output=-1,
@@ -165,10 +183,10 @@ for fold_number, (train_index, test_index) in enumerate(kf.split(df_o)):
                 
         hist_dict[fold_number] = models_dict
             # metrics_dict[fold_number] = ri.get_metrics_RI(models_dict, X_test_acp, y_test_acp, X_val_acp, y_val_acp, X_test_rej)
-        logging.debug(f"fold_number = {fold_number}")
+        detailed_logger.debug(f"fold_number = {fold_number}")
 
     except Exception as e:
-        logging.exception("An error occurred.")
+        detailed_logger.exception("An error occurred.")
         break
 
 
@@ -178,7 +196,7 @@ try:
     filepath.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(data_dict, filepath)
 except Exception as e:
-        logging.exception("An error occurred.")
+        detailed_logger.exception("An error occurred.")
         
 
 
@@ -188,7 +206,7 @@ try:
     filepath.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(hist_dict, filepath)
 except Exception as e:
-        logging.exception("An error occurred.")
+        detailed_logger.exception("An error occurred.")
 
 
 # %%
@@ -202,68 +220,60 @@ hist_kick = {}
 
 kf = KFold(n_splits=N_splits, random_state=main_seed, shuffle = True)   #80-20 split for train-test
 
-for i in range(low_AR,high_AR):
-    AR = i/100.
-    metrics_dict = {}
-    try:
-        for fold_number in range(N_splits):
 
-            (X_train_acp, X_train_rej, y_train_acp, y_train_rej, 
-            X_test_acp, X_test_rej, y_test_acp,X_val_acp, X_val_rej, y_val_acp) = data_dict[fold_number]
+metrics_dict = {}
+try:
+    for fold_number in range(N_splits):
 
-            seed_number = main_seed+fold_number
-            filepath_ex = Path(os.path.join(ri_datasets_path,f'TN-{seed_number}.joblib'))
-            filepath_ls = Path(os.path.join(ri_datasets_path,f'TN+-{seed_number}.joblib'))
-            
-            datasets_ex = joblib.load(filepath_ex)
-            datasets_ls = joblib.load(filepath_ls)
+        (X_train_acp, X_train_rej, y_train_acp, y_train_rej, 
+        X_test_acp, X_test_rej, y_test_acp,X_val_acp, X_val_rej, y_val_acp) = data_dict[fold_number]
 
-            def evaluate_best_it(dsets, X_val_acp, y_val_acp, X_val_rej, AR, w):
-                values = []
+        seed_number = main_seed+fold_number
+        filepath_ex = Path(os.path.join(ri_datasets_path,f'TN-{seed_number}-{p_value}.joblib'))
+        filepath_ls = Path(os.path.join(ri_datasets_path,f'TN+-{seed_number}-{p_value}.joblib'))
+        
+        datasets_ex = joblib.load(filepath_ex)
+        datasets_ls = joblib.load(filepath_ls)
 
-                for it in list(dsets.keys()):
-                    auc_value = roc_auc_score(y_val_acp, dsets[it].predict_proba(X_val_acp)[:,1])
-                    kick_value = ri.calculate_kickout_metric(dsets['BM'], dsets[it], X_val_acp, y_val_acp, X_val_rej, acp_rate=AR)[0]
-                    it_values = [auc_value, kick_value]
-                    values.append(it_values)
-                weights = w
-                values = np.array(values)
-                
-                criterias = np.array([True, True])
-                t = top.Topsis(values, weights, criterias)
-                t.calc()
-                output = t.rank_to_best_similarity()[0] - 1
-                print(f'best iteration: {output}')
-                return output
-            
-            output_ex = evaluate_best_it(datasets_ex, X_val_acp, y_val_acp, X_val_rej, AR, weights)
-            print(f'--------{fold_number}--------')
-            output_ls = evaluate_best_it(datasets_ls, X_val_acp, y_val_acp, X_val_rej, AR, weights)
+        output_ex, best_values_ex = ri.evaluate_by_AUC_AUK(datasets_ex, X_val_acp, y_val_acp, X_val_rej, weights, criterias, low_AR, high_AR)
+        output_ls, best_values_ls = ri.evaluate_by_AUC_AUK(datasets_ls, X_val_acp, y_val_acp, X_val_rej, weights, criterias, low_AR, high_AR)
+        print(f'Best values for extrapolation: {best_values_ex} at iteration {output_ex}')
+        print(f'Best values for label spreading: {best_values_ls} at iteration {output_ls}')
+        print(f'--------{fold_number}--------')
+        
+        if output_ex != 0:
+            hist_dict[fold_number]['TN'] = datasets_ex[f'TN_{output_ex}']
+        else:
+            hist_dict[fold_number]['TN'] = datasets_ex['BM']
+        
+        if output_ls != 0:
+            hist_dict[fold_number]['TN+'] = datasets_ls[f'TN_{output_ls}']
+        else:
+            hist_dict[fold_number]['TN+'] = datasets_ls['BM']
+        
+        # Initialize a dictionary to hold all the basic metrics for EX
+        df_TN = ri.get_metrics_RI(datasets_ex, X_test_acp, y_test_acp, X_unl=X_test_rej)
+        df_auc_ex = df_TN.loc['AUC', :]
+        df_kick_ex = ri.area_under_the_kick(datasets_ex, X_test_acp, y_test_acp, X_test_rej, low_AR, high_AR)
 
-            if output_ex != 0:
-                hist_dict[fold_number]['TN'] = datasets_ex[f'TN_{output_ex}']
-            else:
-                hist_dict[fold_number]['TN'] = datasets_ex['BM']
-            
-            if output_ls != 0:
-                hist_dict[fold_number]['TN+'] = datasets_ls[f'TN_{output_ls}']
-            else:
-                hist_dict[fold_number]['TN+'] = datasets_ls['BM']
-            
+        # Initialize a dictionary to hold all the basic metrics for LS
+        df_TNplus = ri.get_metrics_RI(datasets_ls,  X_test_acp, y_test_acp, X_unl=X_test_rej)
+        df_auc_ls = df_TNplus.loc['AUC', :]
+        df_kick_ls = ri.area_under_the_kick(datasets_ls, X_test_acp, y_test_acp, X_test_rej, low_AR, high_AR)
 
-            metrics_dict[fold_number] = ri.get_metrics_RI(hist_dict[fold_number], X_test_acp, y_test_acp, X_unl = X_test_rej,
-                                                    acp_rate=AR, threshold_type='none')
-    except Exception as e:
-        logging.exception("An error occurred.")
-    # break
-    
-    try:
-        mean_metrics = sum([metrics_dict[i] for i in range(N_splits)])/N_splits
-        hist_kick[AR] = mean_metrics.loc[['Kickout', "Overall AUC"]]
-    except Exception as e:
-        logging.exception("An error occurred.")
+        metrics_dict[fold_number] = ri.get_metrics_RI(hist_dict[fold_number], X_test_acp, y_test_acp, X_unl = X_test_rej,
+                                                acp_rate=0.5, threshold_type='none')
+except Exception as e:
+    detailed_logger.exception("An error occurred.")
+# break
 
-    # break
+try:
+    mean_metrics = sum([metrics_dict[i] for i in range(N_splits)])/N_splits
+    hist_kick[AR] = mean_metrics.loc[['Kickout', "Overall AUC"]]
+except Exception as e:
+    detailed_logger.exception("An error occurred.")
+
+# break
 
 # %%
 print(hist_kick)
@@ -271,7 +281,7 @@ print(hist_kick)
 try:
     df_kick = pd.concat(hist_kick, axis=0)
 except Exception as e:
-        logging.exception("An error occurred.")
+        detailed_logger.exception("An error occurred.")
 
 #save metrics
 try:
@@ -279,7 +289,7 @@ try:
     filepath.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(df_kick, filepath)
 except Exception as e:
-        logging.exception("An error occurred.")
+        detailed_logger.exception("An error occurred.")
 
 param_exec = {
     'low_AR' : low_AR,
@@ -297,7 +307,7 @@ try:
     filepath.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(param_exec, filepath)
 except Exception as e:
-        logging.exception("An error occurred.")
+        detailed_logger.exception("An error occurred.")
 
 
 

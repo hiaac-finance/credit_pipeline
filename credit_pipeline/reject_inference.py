@@ -616,7 +616,7 @@ def create_datasets_with_ri(X_train, y_train, X_unl,
                                 rot_class = LGBMClassifier,
                                 rot_params = params_dict['LightGBM_2'],
                                 seed = 880,
-                                verbose = True,
+                                verbose = False,
                                 technique = 'extrapolation',
                                ):
 
@@ -673,7 +673,7 @@ def trusted_non_outliers(X_train, y_train, X_unl,
                                 rot_class = LGBMClassifier,
                                 rot_params = params_dict['LightGBM_2'],
                                 seed= 880,
-                                verbose = False,
+                                return_all = False,
                                 output = -1,
                                 save_log = True,
                                 technique = 'extrapolation',
@@ -717,7 +717,14 @@ def trusted_non_outliers(X_train, y_train, X_unl,
     _type_
         _description_
     """
+    auto = False
     clf_params.update({'random_state': seed})
+    if p == "auto":
+        print(f'p = {p}')
+        p = round((1.5)*(y_train.mean()),3)
+        print(f'y = {y_train.mean()}')
+        print(f'p = {p}')
+        auto = True
 
     datasets = create_datasets_with_ri(X_train, y_train, X_unl,
                                 iterations = iterations,
@@ -727,7 +734,6 @@ def trusted_non_outliers(X_train, y_train, X_unl,
                                 rot_class = rot_class,
                                 rot_params = rot_params,
                                 seed = seed,
-                                verbose = verbose,
                                 technique = technique)
     logging.debug(f'datasets created')                        
     dict_clfs = {}
@@ -765,12 +771,20 @@ def trusted_non_outliers(X_train, y_train, X_unl,
 
 
     if save_log == True:
-        filepath = Path(os.path.join(ri_datasets_path,f'TN-{seed}-{p}.joblib'))
-        if technique == 'LS':
-            filepath = Path(os.path.join(ri_datasets_path,f'TN+-{seed}-{p}.joblib'))
+        if auto:
+            filepath = Path(os.path.join(ri_datasets_path,f'TN-{seed}-auto.joblib'))
+            if technique == 'LS':
+                filepath = Path(os.path.join(ri_datasets_path,f'TN+-{seed}-auto.joblib'))
+        else:
+            filepath = Path(os.path.join(ri_datasets_path,f'TN-{seed}-{p}.joblib'))
+            if technique == 'LS':
+                filepath = Path(os.path.join(ri_datasets_path,f'TN+-{seed}-{p}.joblib'))
         logging.debug(f'saving log to {filepath}')
         filepath.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(dict_clfs, filepath)
+
+    if return_all:
+        return dict_clfs, datasets
     
     X_train = datasets["X"][output]
     y_train = datasets["y"][output]
@@ -863,7 +877,7 @@ def area_under_the_kick(models_dict, X_eval, y_eval, R_eval, low_AR, high_AR):
         for a in range(low_AR, high_AR):
             AR = a / 100
             # Calculate kickout value
-            kick_value = faster_kickout(y_eval, p_acp, p_all, acp_rate=AR)[[0]
+            kick_value = faster_kickout(y_eval, p_acp, p_all, acp_rate=AR)[0]
             ar_dict[a] = kick_value
 
     # Store the results for the current 'it'
@@ -893,31 +907,8 @@ def evaluate_by_AUC_AUK(models, X_val, y_val, R_val, weights = [1,1], criterias 
     # Calculate the Topsis rankings
     t.calc()
 
-
-
-
-
-
     # Get the rank-to-best similarity and subtract 1 to get the best iteration
     output = t.rank_to_best_similarity()[0]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     logging.debug(f'output: {output}')
     return output, values[output]

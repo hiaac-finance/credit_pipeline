@@ -60,12 +60,26 @@ parser.add_argument('-wt', '--weights', type=int, nargs=2, default=[1, 1], help=
 parser.add_argument('--seed', type=int, help='Seed number')
 parser.add_argument('-y', '--year', type=int, default=2009, help='Year')
 parser.add_argument('-p', '--percent_bad', type=float, default=0.2, help='Percentage bad added')
+parser.add_argument('-s', '--size', type=int, default=1000, help='Percentage bad added')
+parser.add_argument('-c', '--contamination', type=float, default=0.12, help='Percentage bad added')
 parser.add_argument('-ut', '--use_test', action='store_true', help='Use test set to evaluate')
 parser.add_argument('-tri', '--train_ri', action='store_true', default=True, help='Train others RI models')
 parser.add_argument('-re', '--reuse_exec', action='store_true', default=False, help='Reuse trained models')
 parser.add_argument('-tn', '--train_tn', action='store_true', default=True, help='Train Trusted Non-Outliers models')
+parser.add_argument('-ev', '--eval_ri', action='store_true', default=False, help='Evaluate models')
 args = parser.parse_args()
 
+if args.percent_bad == 0:
+    p_value = 'auto'
+
+if args.percent_bad:
+    p_value = args.percent_bad
+
+if args.size:
+    size = args.size
+
+if args.contamination:
+    contamination_threshold = args.contamination
 
 #Accept rate
 if args.ar_range:
@@ -91,7 +105,7 @@ print(seed_number)
 main_seed = seed_number
 year = args.year
 
-metadata = {'seed': str(main_seed), 'year': str(year), 'p': str(args.percent_bad)}
+metadata = {'seed': str(main_seed), 'year': str(year), 'p': str(p_value)}
 
 
 today = time.strftime("%Y-%m-%d")
@@ -135,7 +149,7 @@ detailed_logger.debug(args)
 
 load_path = f'{ri_datasets_path}Load/{main_seed}_{year}'
 
-if Path(f'{load_path}').exists() and False:
+if Path(f'{load_path}').exists():# and False:
     df_train = pd.read_csv(f'{load_path}/A_train.csv', index_col=0)
     df_val = pd.read_csv(f'{load_path}/A_val.csv', index_col=0)
     df_test = pd.read_csv(f'{load_path}/A_test.csv', index_col=0)
@@ -359,194 +373,214 @@ detailed_logger.info(f'benchmark fitted')
 
 
 if args.train_ri:
-    models_dict.update(
-        ri.augmentation_with_soft_cutoff(X_train, y_train, R_train, seed = seed_number))
-    detailed_logger.debug(f'augmentation_with_soft_cutoff fitted')
-    models_dict.update(
-        ri.augmentation(X_train, y_train, R_train, mode='up', seed = seed_number))
-    detailed_logger.debug(f'augmentation upward fitted')
-    models_dict.update(
-        ri.fuzzy_augmentation(X_train, y_train, R_train, seed = seed_number))
-    detailed_logger.debug(f'fuzzy_augmentation fitted')
-    models_dict.update(
-        ri.extrapolation(X_train, y_train, R_train, seed = seed_number))
-    detailed_logger.debug(f'extrapolation fitted')
-    models_dict.update(
-        ri.parcelling(X_train, y_train, R_train, seed = seed_number))
-    detailed_logger.debug(f'parcelling fitted')
-    models_dict.update(
-        ri.label_spreading(X_train, y_train, R_train, seed = seed_number))
-    detailed_logger.debug(f'label_spreading fitted')
+    filepath_models = Path(os.path.join(ri_datasets_path,f'Models/RI-{seed_number}-{year}.joblib'))
+    if filepath_models.exists() and args.reuse_exec:
+        models_dict = joblib.load(filepath_models)
+        detailed_logger.debug(f'Models loaded with shape: {len(models_dict.keys())}')
+    else:
+        models_dict.update(
+            ri.augmentation_with_soft_cutoff(X_train, y_train, R_train, seed = seed_number))
+        detailed_logger.debug(f'augmentation_with_soft_cutoff fitted')
+        models_dict.update(
+            ri.augmentation(X_train, y_train, R_train, mode='up', seed = seed_number))
+        detailed_logger.debug(f'augmentation upward fitted')
+        models_dict.update(
+            ri.fuzzy_augmentation(X_train, y_train, R_train, seed = seed_number))
+        detailed_logger.debug(f'fuzzy_augmentation fitted')
+        models_dict.update(
+            ri.extrapolation(X_train, y_train, R_train, seed = seed_number))
+        detailed_logger.debug(f'extrapolation fitted')
+        models_dict.update(
+            ri.parcelling(X_train, y_train, R_train, seed = seed_number))
+        detailed_logger.debug(f'parcelling fitted')
+        models_dict.update(
+            ri.label_spreading(X_train, y_train, R_train, seed = seed_number))
+        detailed_logger.debug(f'label_spreading fitted')
+
+        filepath_models.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(models_dict, filepath_models)
 
 if args.train_tn:
-    filepath_ex = Path(os.path.join(ri_datasets_path,f'TN-{seed_number}-{args.percent_bad}.joblib'))
-    filepath_ls = Path(os.path.join(ri_datasets_path,f'TN+-{seed_number}-{args.percent_bad}.joblib'))
+    filepath_ex = Path(os.path.join(ri_datasets_path,f'Models/TN-{seed_number}-{year}-{size}-{p_value}-{contamination_threshold}.joblib'))
+    datapath_ex = Path(os.path.join(ri_datasets_path,f'Data/TN-{seed_number}-{year}-{size}-{p_value}-{contamination_threshold}.joblib'))
+    # filepath_ls = Path(os.path.join(ri_datasets_path,f'TN+-{seed_number}-{year}-{size}-{p_value}-{contamination_threshold}.joblib'))
 
     if filepath_ex.exists() and args.reuse_exec:
         models_ex = joblib.load(filepath_ex)
         detailed_logger.debug(f'TN loaded with shape: {len(models_ex.keys())}')
     else:
-        ri.trusted_non_outliers(X_train=X_train, y_train=y_train, X_unl=R_train,
-                                        X_val=X_val, y_val=y_val, iterations=50, p=args.percent_bad, acp_rate=0.5,
-                                        technique='extrapolation', seed=seed_number, output=-1)
-        detailed_logger.debug(f'TN fitted')
-        models_ex = joblib.load(filepath_ex)
-    if filepath_ls.exists() and args.reuse_exec:
-        models_ls = joblib.load(filepath_ls)
-        detailed_logger.debug(f'TN+ loaded with shape: {len(models_ls.keys())}')
-    else:
-        ri.trusted_non_outliers(X_train=X_train, y_train=y_train, X_unl=R_train,
-                                        X_val=X_val, y_val=y_val, iterations=50, p=args.percent_bad, acp_rate=0.5,
-                                        technique='LS', seed=seed_number, output=-1)
-        detailed_logger.debug(f'TN+ fitted')
-        models_ls = joblib.load(filepath_ls)
-
-
-# Initialize a dictionary to hold all the basic metrics
-df_metrics = ri.get_metrics_RI(models_dict, X_eval, y_eval, X_unl=R_eval)
-df_metrics['metadata'] = str(metadata)
-if args.use_test:
-    filepath = Path(os.path.join(ri_datasets_path, f'metrics_bm_/test/Exp-{main_seed}-{year}.csv'))
-else:
-    filepath = Path(os.path.join(ri_datasets_path, f'metrics_bm_/val/Exp-{main_seed}-{year}.csv'))
-filepath.parent.mkdir(parents=True, exist_ok=True)
-df_metrics.round(4).to_csv(filepath, index=True)
-detailed_logger.debug(f'Metrics saved to {filepath}')
-
-if args.train_tn:
-    # Initialize a dictionary to hold all the basic metrics for EX
-    df_TN = ri.get_metrics_RI(models_ex, X_eval, y_eval, X_unl=R_eval)
-    df_auc_ex = df_TN.loc['AUC', :]
-    df_kick_ex = ri.area_under_the_kick(models_ex, X_eval, y_eval, R_eval, low_AR, high_AR)
-
-    # Initialize a dictionary to hold all the basic metrics for LS
-    df_TNplus = ri.get_metrics_RI(models_ls, X_eval, y_eval, X_unl=R_eval)
-    df_auc_ls = df_TNplus.loc['AUC', :]
-    df_kick_ls = ri.area_under_the_kick(models_ls, X_eval, y_eval, R_eval, low_AR, high_AR)
-
-
-    # Evaluate the ex iterations
-    output_ex, best_values_ex = ri.evaluate_by_AUC_AUK(models_ex, X_val, y_val, R_val, weights, criterias, low_AR, high_AR)
-    detailed_logger.debug(f'models_ex evaluated')
-    # print('EX', df_auc_ex[f'TN_{output_ex+1}'], df_kick_ex[f'TN_{output_ex+1}'].mean())
-
-    # Evaluate the ls iterations
-    output_ls, best_values_ls = ri.evaluate_by_AUC_AUK(models_ls, X_val, y_val, R_val, weights, criterias, low_AR, high_AR)
-    detailed_logger.debug(f'models_ls evaluated')
-    # print('LS', best_values_ls, df_auc_ls[f'TN_{output_ls+1}'], df_kick_ls[f'TN_{output_ls+1}'].mean())
-
-
-    # Plot the AUC and kickout rate for each iteration of TN.
-    fig, axs = plt.subplots(1, 2, figsize=(10, 4))
-
-    # Plot the AUC and kickout rate for each iteration of TN (ex)
-    y_tn = np.arange(len(df_kick_ex.keys()))
-    axs[0].plot(y_tn, df_kick_ex.mean(), color='blue', linestyle='--', marker='o', markersize=3, label='AUK')
-    axs[0].plot(y_tn, df_auc_ex, color='red', linestyle='-', marker='s', markersize=3, label='AUC')
-    axs[0].plot(output_ex, best_values_ex[0], color='black', linestyle='', marker='x', markersize=10, label='Best Iteration')
-    axs[0].axvline(x=output_ex, color='black', linestyle='--', linewidth=0.5)
-    axs[0].set_title('Trusted Non-Outliers')
-    axs[0].set_xlabel('Iteration')
-    axs[0].set_ylabel('AUC / AUK')
-    axs[0].legend()
-
-    # Plot the AUC and kickout rate for each iteration of TNplus (ls)
-    y_plus = np.arange(len(df_kick_ls.keys()))
-    axs[1].plot(y_plus, df_kick_ls.mean(), color='blue', linestyle='--', marker='o', markersize=3, label='AUK')
-    axs[1].plot(y_plus, df_auc_ls, color='red', linestyle='-', marker='s', markersize=3, label='AUC')
-    axs[1].plot(output_ls, best_values_ls[0], color='black', linestyle='', marker='x', markersize=10, label='Best Iteration')
-    axs[1].axvline(x=output_ls, color='black', linestyle='--', linewidth=0.5)
-    axs[1].set_title('Trusted Non-Outliers Plus')
-    axs[1].set_xlabel('Iteration')
-    axs[1].set_ylabel('AUC / AUK')
-    axs[1].legend()
-
-    if args.use_test:
-        filename = Path(os.path.join(backup_image_folder, f'TN_AUC_AUK/test-{main_seed}-{year}-{args.percent_bad}.png'))
-        filename.parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(filename, metadata=metadata)
-    else:
-        filename = Path(os.path.join(backup_image_folder, f'TN_AUC_AUK/val-{main_seed}-{year}-{args.percent_bad}.png'))
-        filename.parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(filename, metadata=metadata)
-    detailed_logger.debug(f'Image saved to {filename}')
-
-
-    # It could be interesting to also compare the number of includes rejected samples as a metric
-
-
-    # Update the models dictionary with the best models for each technique
-
-    models_dict.update({f'TN': models_ex[f'TN_{output_ex}']})
-    models_dict.update({f'TN+': models_ls[f'TN_{output_ls}']})
-
-else:
-    detailed_logger.debug(f'No TN fitted')
-
-# Evaluate the RI models
-auk = ri.area_under_the_kick(models_dict, X_eval, y_eval, R_eval, low_AR, high_AR).mean().round(4)
-metrics = ri.get_metrics_RI(models_dict, X_eval, y_eval, X_unl=R_eval, acp_rate=0.5).round(4)
-metrics = metrics.drop(['KG', 'KB'], axis=0)
-metrics = pd.concat([metrics, auk.to_frame(name='AUK').T])
-auc = metrics.loc['AUC', :].round(4)
-kick = metrics.loc['Kickout', :].round(4)
-
-detailed_logger.debug(f'AUC and AUK calculated')
-
-fig, ax = plt.subplots(figsize=(10, 4))  # Create a figure and an axes.
-
-# Plot the AUC and kickout rate for each model.
-ax.plot(auk, color='blue', linestyle='--', marker='o', markersize=3, label='AUK')
-ax.plot(auc, color='red', linestyle='-', marker='s', markersize=3, label='AUC')
-ax.plot(kick, color='green', linestyle='-', marker='s', markersize=3, label='Kickout')
-ax.set_xlabel('Model')
-ax.set_ylabel('Value')
-ax.grid(True)
-ax.set_title('AUK, Kickout and AUC by Model')
-ax.legend()
-
-if args.use_test:
-    filename = Path(os.path.join(backup_image_folder, f'ALL_AUC_AUK/test-{main_seed}-{year}-{args.percent_bad}.png'))
-    filename.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(filename, metadata=metadata)
-else:
-    filename = Path(os.path.join(backup_image_folder, f'ALL_AUC_AUK/val-{main_seed}-{year}-{args.percent_bad}.png'))
-    filename.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(filename, metadata=metadata)
-    detailed_logger.debug(f'Image saved to {filename}')
-print(filename)
-
-
-# metrics['metadata'] = str(metadata)
-if args.use_test:
-    filepath = Path(os.path.join(ri_datasets_path, f'metrics_bm/test/Exp-{main_seed}-{year}.csv'))
-else:
-    filepath = Path(os.path.join(ri_datasets_path, f'metrics_bm/val/Exp-{main_seed}-{year}.csv'))
-filepath.parent.mkdir(parents=True, exist_ok=True)
-metrics.to_csv(filepath, index=True)
-
-detailed_logger.debug(f'Metrics saved to {filepath}')
-
-
-if args.train_tn:
-    # Define the file path to save the results
-    # df_kick_ex['metadata'] = str(metadata)
-    # df_kick_ls['metadata'] = str(metadata)
-
-    if args.use_test:
-        filepath_ex = Path(os.path.join(ri_datasets_path,f'area_under_the_kick/test/ex-{main_seed}-{year}.csv'))
-        filepath_ls = Path(os.path.join(ri_datasets_path,f'area_under_the_kick/test/ls-{main_seed}-{year}.csv'))
-    else:
-        filepath_ex = Path(os.path.join(ri_datasets_path,f'area_under_the_kick/val/ex-{main_seed}-{year}.csv'))
-        filepath_ls = Path(os.path.join(ri_datasets_path,f'area_under_the_kick/val/ls-{main_seed}-{year}.csv'))
+        TNmodels, TNdata = ri.trusted_non_outliers(X_train=X_train, y_train=y_train, X_unl=R_train,
+                                        X_val=X_val, y_val=y_val, iterations=50, p=p_value, 
+                                        contamination_threshold=contamination_threshold, return_all=True,
+                                        save_log=False, technique='extrapolation', seed=seed_number, output=-1)
         
-    # Save the results to a CSV file
-    filepath_ex.parent.mkdir(parents=True, exist_ok=True)
-    filepath_ls.parent.mkdir(parents=True, exist_ok=True)
+        filepath_ex.parent.mkdir(parents=True, exist_ok=True)
+        datapath_ex.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(TNmodels, filepath_ex)
+        joblib.dump(TNdata, datapath_ex)
+        detailed_logger.debug(f'TN fitted')
+        models_ex = TNmodels
+        
+        
 
-    df_kick_ex.round(4).to_csv(filepath_ex, index=True)
-    detailed_logger.debug(f'Kickout saved to {filepath_ex}')
-    
-    df_kick_ls.round(4).to_csv(filepath_ls, index=True)
-    detailed_logger.debug(f'Kickout saved to {filepath_ls}')
+    # if filepath_ls.exists() and args.reuse_exec:
+    #     models_ls = joblib.load(filepath_ls)
+    #     detailed_logger.debug(f'TN+ loaded with shape: {len(models_ls.keys())}')
+    # else:
+    #     ri.trusted_non_outliers(X_train=X_train, y_train=y_train, X_unl=R_train,
+    #                                     X_val=X_val, y_val=y_val, iterations=50, p=p_value, acp_rate=0.5,
+    #                                     technique='LS', seed=seed_number, output=-1)
+    #     detailed_logger.debug(f'TN+ fitted')
+    #     models_ls = joblib.load(filepath_ls)
 
+if args.eval_ri:
+    # Initialize a dictionary to hold all the basic metrics
+    df_metrics = ri.get_metrics_RI(models_dict, X_eval, y_eval, X_unl=R_eval)
+    df_metrics['metadata'] = str(metadata)
+    if args.use_test:
+        filepath = Path(os.path.join(ri_datasets_path, f'metrics_bm_/test/Exp-{main_seed}-{year}.csv'))
+    else:
+        filepath = Path(os.path.join(ri_datasets_path, f'metrics_bm_/val/Exp-{main_seed}-{year}.csv'))
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    df_metrics.round(4).to_csv(filepath, index=True)
+    detailed_logger.debug(f'Metrics saved to {filepath}')
+
+    if args.train_tn:
+        # Initialize a dictionary to hold all the basic metrics for EX
+        df_TN = ri.get_metrics_RI(models_ex, X_eval, y_eval, X_unl=R_eval)
+        df_auc_ex = df_TN.loc['AUC', :]
+        df_kick_ex = ri.area_under_the_kick(models_ex, X_eval, y_eval, R_eval, low_AR, high_AR)
+
+        # # Initialize a dictionary to hold all the basic metrics for LS
+        # df_TNplus = ri.get_metrics_RI(models_ls, X_eval, y_eval, X_unl=R_eval)
+        # df_auc_ls = df_TNplus.loc['AUC', :]
+        # df_kick_ls = ri.area_under_the_kick(models_ls, X_eval, y_eval, R_eval, low_AR, high_AR)
+
+
+        # Evaluate the ex iterations
+        output_ex, best_values_ex = ri.evaluate_by_AUC_AUK(models_ex, X_val, y_val, R_val, weights, criterias, low_AR, high_AR)
+        detailed_logger.debug(f'models_ex evaluated')
+        # print('EX', df_auc_ex[f'TN_{output_ex+1}'], df_kick_ex[f'TN_{output_ex+1}'].mean())
+
+        # # Evaluate the ls iterations
+        # output_ls, best_values_ls = ri.evaluate_by_AUC_AUK(models_ls, X_val, y_val, R_val, weights, criterias, low_AR, high_AR)
+        # detailed_logger.debug(f'models_ls evaluated')
+        # print('LS', best_values_ls, df_auc_ls[f'TN_{output_ls+1}'], df_kick_ls[f'TN_{output_ls+1}'].mean())
+
+
+        # Plot the AUC and kickout rate for each iteration of TN.
+        fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+
+        # Plot the AUC and kickout rate for each iteration of TN (ex)
+        y_tn = np.arange(len(df_kick_ex.keys()))
+        axs[0].plot(y_tn, df_kick_ex.mean(), color='blue', linestyle='--', marker='o', markersize=3, label='AUK')
+        axs[0].plot(y_tn, df_auc_ex, color='red', linestyle='-', marker='s', markersize=3, label='AUC')
+        axs[0].plot(output_ex, best_values_ex[0], color='black', linestyle='', marker='x', markersize=10, label='Best Iteration')
+        axs[0].axvline(x=output_ex, color='black', linestyle='--', linewidth=0.5)
+        axs[0].set_title('Trusted Non-Outliers')
+        axs[0].set_xlabel('Iteration')
+        axs[0].set_ylabel('AUC / AUK')
+        axs[0].legend()
+
+        # # Plot the AUC and kickout rate for each iteration of TNplus (ls)
+        # y_plus = np.arange(len(df_kick_ls.keys()))
+        # axs[1].plot(y_plus, df_kick_ls.mean(), color='blue', linestyle='--', marker='o', markersize=3, label='AUK')
+        # axs[1].plot(y_plus, df_auc_ls, color='red', linestyle='-', marker='s', markersize=3, label='AUC')
+        # axs[1].plot(output_ls, best_values_ls[0], color='black', linestyle='', marker='x', markersize=10, label='Best Iteration')
+        # axs[1].axvline(x=output_ls, color='black', linestyle='--', linewidth=0.5)
+        # axs[1].set_title('Trusted Non-Outliers Plus')
+        # axs[1].set_xlabel('Iteration')
+        # axs[1].set_ylabel('AUC / AUK')
+        # axs[1].legend()
+
+        if args.use_test:
+            filename = Path(os.path.join(backup_image_folder, f'TN_AUC_AUK/test-{main_seed}-{year}-{p_value}.png'))
+            filename.parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(filename, metadata=metadata)
+        else:
+            filename = Path(os.path.join(backup_image_folder, f'TN_AUC_AUK/val-{main_seed}-{year}-{p_value}.png'))
+            filename.parent.mkdir(parents=True, exist_ok=True)
+            plt.savefig(filename, metadata=metadata)
+        detailed_logger.debug(f'Image saved to {filename}')
+
+
+        # It could be interesting to also compare the number of includes rejected samples as a metric
+
+
+        # Update the models dictionary with the best models for each technique
+
+        models_dict.update({f'TN': models_ex[f'TN_{output_ex}']})
+        # models_dict.update({f'TN+': models_ls[f'TN_{output_ls}']})
+
+    else:
+        detailed_logger.debug(f'No TN fitted')
+
+    # Evaluate the RI models
+    auk = ri.area_under_the_kick(models_dict, X_eval, y_eval, R_eval, low_AR, high_AR).mean().round(4)
+    metrics = ri.get_metrics_RI(models_dict, X_eval, y_eval, X_unl=R_eval, acp_rate=0.5).round(4)
+    metrics = metrics.drop(['KG', 'KB'], axis=0)
+    metrics = pd.concat([metrics, auk.to_frame(name='AUK').T])
+    auc = metrics.loc['AUC', :].round(4)
+    kick = metrics.loc['Kickout', :].round(4)
+
+    detailed_logger.debug(f'AUC and AUK calculated')
+
+    fig, ax = plt.subplots(figsize=(10, 4))  # Create a figure and an axes.
+
+    # Plot the AUC and kickout rate for each model.
+    ax.plot(auk, color='blue', linestyle='--', marker='o', markersize=3, label='AUK')
+    ax.plot(auc, color='red', linestyle='-', marker='s', markersize=3, label='AUC')
+    ax.plot(kick, color='green', linestyle='-', marker='s', markersize=3, label='Kickout')
+    ax.set_xlabel('Model')
+    ax.set_ylabel('Value')
+    ax.grid(True)
+    ax.set_title('AUK, Kickout and AUC by Model')
+    ax.legend()
+
+    if args.use_test:
+        filename = Path(os.path.join(backup_image_folder, f'ALL_AUC_AUK/test-{main_seed}-{year}-{p_value}.png'))
+        filename.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(filename, metadata=metadata)
+    else:
+        filename = Path(os.path.join(backup_image_folder, f'ALL_AUC_AUK/val-{main_seed}-{year}-{p_value}.png'))
+        filename.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(filename, metadata=metadata)
+        detailed_logger.debug(f'Image saved to {filename}')
+    print(filename)
+
+
+    # metrics['metadata'] = str(metadata)
+    if args.use_test:
+        filepath = Path(os.path.join(ri_datasets_path, f'metrics_bm/test/Exp-{main_seed}-{year}.csv'))
+    else:
+        filepath = Path(os.path.join(ri_datasets_path, f'metrics_bm/val/Exp-{main_seed}-{year}.csv'))
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    metrics.to_csv(filepath, index=True)
+
+    detailed_logger.debug(f'Metrics saved to {filepath}')
+
+
+    if args.train_tn:
+        # Define the file path to save the results
+        # df_kick_ex['metadata'] = str(metadata)
+        # df_kick_ls['metadata'] = str(metadata)
+
+        if args.use_test:
+            filepath_ex = Path(os.path.join(ri_datasets_path,f'area_under_the_kick/test/ex-{main_seed}-{year}.csv'))
+            # filepath_ls = Path(os.path.join(ri_datasets_path,f'area_under_the_kick/test/ls-{main_seed}-{year}.csv'))
+        else:
+            filepath_ex = Path(os.path.join(ri_datasets_path,f'area_under_the_kick/val/ex-{main_seed}-{year}.csv'))
+            # filepath_ls = Path(os.path.join(ri_datasets_path,f'area_under_the_kick/val/ls-{main_seed}-{year}.csv'))
+            
+        # Save the results to a CSV file
+        filepath_ex.parent.mkdir(parents=True, exist_ok=True)
+        # filepath_ls.parent.mkdir(parents=True, exist_ok=True)
+
+        df_kick_ex.round(4).to_csv(filepath_ex, index=True)
+        detailed_logger.debug(f'Kickout saved to {filepath_ex}')
+        
+        # df_kick_ls.round(4).to_csv(filepath_ls, index=True)
+        # detailed_logger.debug(f'Kickout saved to {filepath_ls}')
+
+else:
+    detailed_logger.debug(f'No evaluation requested')

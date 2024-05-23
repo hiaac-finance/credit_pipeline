@@ -48,23 +48,28 @@ def main():
     # Define argument values to iterate over
     ar_ranges = [(0, 100)]
     weights = [(1, 1)]
-    years = [2010]
-    seeds = [388388, 938870] #[120054,388388,570334,907360,938870]
-    percent_bads = [0.2]
+    years = [2009]
+    seeds = [120054,]#388388,570334,907360,938870]
+    percent_bads = [0.10]
+    sizes = [10000]
+    contaminations = [0.43]
     # For boolean flags, use a tuple with the argument name and a boolean to indicate if it should be included
     use_test_flags = [('--use_test', True)]
     train_ri_flags = [('--train_ri', True)]  # Always true, but included for completeness
     reuse_exec_flags = [('--reuse_exec', False)]
     train_tn_flags = [('--train_tn', True)]
+    eval_ri_flags = [('--eval_ri', False)]
 
 
     experiments = itertools.product(
-        ar_ranges, weights, seeds, years, percent_bads, use_test_flags, train_ri_flags, reuse_exec_flags, train_tn_flags
+        ar_ranges, weights, seeds, years, sizes, percent_bads, contaminations,
+         use_test_flags, train_ri_flags, reuse_exec_flags, train_tn_flags, eval_ri_flags
     )
     log.debug(f'Running {len(list(experiments))}')
     # Iterate over all combinations of arguments
-    for ar_range, weight, seed, year, percent_bad, use_test, train_ri, reuse_exec, train_tn in itertools.product(
-        ar_ranges, weights, seeds, years, percent_bads, use_test_flags, train_ri_flags, reuse_exec_flags, train_tn_flags
+    for ar_range, weight, seed, year, size, percent_bad, contamination, use_test, train_ri, reuse_exec, train_tn, eval_ri in itertools.product(
+        ar_ranges, weights, seeds, years, sizes, percent_bads, contaminations,
+         use_test_flags, train_ri_flags, reuse_exec_flags, train_tn_flags, eval_ri_flags
     ):
         seed = seed + (year - 2009)
         cmd = [
@@ -74,6 +79,8 @@ def main():
             '--seed', str(seed),
             '--year', str(year),
             '--percent_bad', str(percent_bad),
+            '--size', str(size),
+            '--contamination', str(contamination)
         ]
         
         # Add flags if they are true
@@ -85,6 +92,8 @@ def main():
             cmd.append(reuse_exec[0])
         if train_tn[1]:
             cmd.append(train_tn[0])
+        if eval_ri[1]:
+            cmd.append(eval_ri[0])
 
         # Execute the constructed command
         run_command(cmd)
