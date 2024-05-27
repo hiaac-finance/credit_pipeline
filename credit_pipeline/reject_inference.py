@@ -663,7 +663,7 @@ def create_datasets_with_ri(X_train, y_train, X_unl,
     return log_dict
 
 def trusted_non_outliers(X_train, y_train, X_unl,
-                                X_val, y_val,
+                                X_val = None, y_val = None,
                                 iterations = 50,
                                 contamination_threshold = 0.12,
                                 size = 1000,

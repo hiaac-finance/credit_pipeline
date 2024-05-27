@@ -105,12 +105,17 @@ print(seed_number)
 main_seed = seed_number
 year = args.year
 
-metadata = {'seed': str(main_seed), 'year': str(year), 'p': str(p_value)}
+metadata = {'seed': str(main_seed),
+    'year': str(year),
+    'p': str(p_value),
+    'size': str(size),
+    'contamination': str(contamination_threshold),
+  }
 
 
 today = time.strftime("%Y-%m-%d")
 
-logpath = Path(os.path.join(ri_datasets_path,f'LC_py/log_{today}-{main_seed}-{year}.log'))
+logpath = Path(os.path.join(ri_datasets_path,f'LC_py/logs_{today}/log-{seed_number}-{year}-{size}-{p_value}-{contamination_threshold}.log'))
 logpath.parent.mkdir(parents=True, exist_ok=True)
 
 print(logpath)
@@ -373,7 +378,7 @@ detailed_logger.info(f'benchmark fitted')
 
 
 if args.train_ri:
-    filepath_models = Path(os.path.join(ri_datasets_path,f'Models/RI-{seed_number}-{year}.joblib'))
+    filepath_models = Path(os.path.join(ri_datasets_path,f'Models/RI/models-{year}/{seed_number}.joblib'))
     if filepath_models.exists() and args.reuse_exec:
         models_dict = joblib.load(filepath_models)
         detailed_logger.debug(f'Models loaded with shape: {len(models_dict.keys())}')
@@ -401,8 +406,8 @@ if args.train_ri:
         joblib.dump(models_dict, filepath_models)
 
 if args.train_tn:
-    filepath_ex = Path(os.path.join(ri_datasets_path,f'Models/TN-{seed_number}-{year}-{size}-{p_value}-{contamination_threshold}.joblib'))
-    datapath_ex = Path(os.path.join(ri_datasets_path,f'Data/TN-{seed_number}-{year}-{size}-{p_value}-{contamination_threshold}.joblib'))
+    filepath_ex = Path(os.path.join(ri_datasets_path,f'Models/TN-{year}/{seed_number}/{size}-{p_value}-{contamination_threshold}.joblib'))
+    datapath_ex = Path(os.path.join(ri_datasets_path,f'Data/TN-{year}/{seed_number}/{size}-{p_value}-{contamination_threshold}.parquet'))
     # filepath_ls = Path(os.path.join(ri_datasets_path,f'TN+-{seed_number}-{year}-{size}-{p_value}-{contamination_threshold}.joblib'))
 
     if filepath_ex.exists() and args.reuse_exec:
@@ -410,15 +415,37 @@ if args.train_tn:
         detailed_logger.debug(f'TN loaded with shape: {len(models_ex.keys())}')
     else:
         TNmodels, TNdata = ri.trusted_non_outliers(X_train=X_train, y_train=y_train, X_unl=R_train,
-                                        X_val=X_val, y_val=y_val, iterations=50, p=p_value, 
+                                        iterations=50, p=p_value, 
                                         contamination_threshold=contamination_threshold, return_all=True,
                                         save_log=False, technique='extrapolation', seed=seed_number, output=-1)
-        
+        detailed_logger.debug(f'TN fitted')
         filepath_ex.parent.mkdir(parents=True, exist_ok=True)
         datapath_ex.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(TNmodels, filepath_ex)
-        joblib.dump(TNdata, datapath_ex)
-        detailed_logger.debug(f'TN fitted')
+
+        #------------------------------------
+        detailed_logger.debug(f'starting compactation of TN data')
+        train_list = [pd.DataFrame({**item, 'group': i}) for i, item in enumerate(TNdata['X'])]
+        last_df = TNdata['unl'][-1].copy()
+        last_df.loc[:, 'group'] = -1
+
+        df = pd.concat(train_list, axis=0, ignore_index=False)
+        df = pd.concat([df, last_df])
+
+        min_values = df.group.groupby(level=0).min()
+        last_value = TNdata['y'][-1]
+
+        result_df = pd.DataFrame({
+            'first_it': min_values,
+            'label': last_value
+        }, index=min_values.index)
+        result_df = result_df.sort_values(by=['first_it'], ascending=True)
+        result_df.fillna(-1, inplace=True)
+        result_df = result_df.astype(int)
+
+        result_df.to_parquet(datapath_ex)
+        detailed_logger.debug(f'data saved to {datapath_ex}')
+        #------------------------------------
         models_ex = TNmodels
         
         
