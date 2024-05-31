@@ -48,22 +48,22 @@ def run_command(cmd):
     # years = [2009]
     # seeds = [120054, 388388, 570334, 907360, 938870]
     # percent_bads = [0.07, 0.08, 0.09, 0.1, 0.12, 0.13, 0.14, 0.15, 0.16, 0.18, 0.2, 0.22, 0.24, 0.26, 0.28, 0.3, 0.32, 0.36, 0.4]
-    # sizeqs = [1000, 5000, 10000]
+    # sizes = [1000, 5000, 10000]
     # contaminations = [0.12, ]
 
 def main():
     # Define argument values to iterate over
     ar_ranges = [(0, 100)]
     weights = [(1, 1)]
-    years = [2009]
-    seeds = [388388, 570334, 907360, 938870]
+    years = [2010]
+    seeds = [120054, 388388, 570334, 907360, 938870]
     percent_bads = [0.07, 0.08, 0.09, 0.1, 0.12, 0.13, 0.14, 0.15, 0.16, 0.18, 0.2, 0.22, 0.24, 0.26, 0.28, 0.3, 0.32, 0.36, 0.4]
     sizes = [1000, 5000, 10000]
     contaminations = [0.12, ]
     # For boolean flags, use a tuple with the argument name and a boolean to indicate if it should be included
     use_test_flags = [('--use_test', True)]
     train_ri_flags = [('--train_ri', True)]  # Always true, but included for completeness
-    reuse_exec_flags = [('--reuse_exec', False)]
+    reuse_exec_flags = [('--reuse_exec', True)]
     train_tn_flags = [('--train_tn', True)]
     eval_ri_flags = [('--eval_ri', False)]
 
@@ -72,7 +72,10 @@ def main():
         ar_ranges, weights, seeds, years, sizes, percent_bads, contaminations,
          use_test_flags, train_ri_flags, reuse_exec_flags, train_tn_flags, eval_ri_flags
     )
-    log.debug(f'Running {len(list(experiments))}')
+    qtd_exp = len(list(experiments))
+    exp_n = 0
+
+    log.debug(f'Running {qtd_exp} experiments.')
     # Iterate over all combinations of arguments
     for ar_range, weight, seed, year, size, percent_bad, contamination, use_test, train_ri, reuse_exec, train_tn, eval_ri in itertools.product(
         ar_ranges, weights, seeds, years, sizes, percent_bads, contaminations,
@@ -102,6 +105,9 @@ def main():
         if eval_ri[1]:
             cmd.append(eval_ri[0])
 
+        exp_n += 1
+        log.debug(f'Running experiment {exp_n} of {qtd_exp}')
+        
         # Execute the constructed command
         run_command(cmd)
 # %%
