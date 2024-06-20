@@ -46,7 +46,9 @@ RUN pip install numpy \
     aif360 \
     fairgbm \
     scikit-lego[cvxpy] \
-    fairlearn
+    fairlearn \
+    shap \
+    lime
 
 # Install jupyter
 RUN pip install jupyter \
