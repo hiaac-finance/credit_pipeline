@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from sklearn.inspection import partial_dependence
 from sklearn.base import BaseEstimator, ClassifierMixin
 from lime import lime_tabular
@@ -150,6 +151,105 @@ class ShapPipelineExplainer:
             explanation_dict[feature_name] = shap_values[:, i]
         return pd.DataFrame(explanation_dict)[self.feature_names]
 
+    def plot_explanation(self, X):
+        def filter_columns(importances, top_k=5):
+            if len(importances) == 1:
+                v = np.abs(importances.values[0])
+                return importances.columns[v.argsort()[::-1]][0:top_k].tolist()
+            else:
+                v = np.mean(np.abs(importances.values), axis=0)
+                return importances.columns[v.argsort()[::-1]][0:top_k].tolist()
+
+        X_preprocess = self.preprocess.transform(X)
+        prob = self.model.predict_proba(X_preprocess)[0, 1]
+        explanation = self(X)
+
+        fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(10, 5))
+        plt.suptitle(f"prob = {prob:.2f}")
+        pos_color = "#80b1d3"
+        neg_color = "#fccde5"
+
+        # get most important features
+        important_features = filter_columns(explanation, 7)
+        important_features = important_features[::-1]
+        imp = explanation[important_features].values[0]
+        importance_dict = dict(zip(important_features, imp))
+
+        # create barplot
+        axs[0].barh(
+            important_features,
+            imp,
+            color=[neg_color if x < 0 else pos_color for x in imp],
+        )
+        # draw a line in 0
+        axs[0].axvline(0, color="#606060", lw=1)
+
+        # remove axis
+        axs[0].spines["top"].set_visible(False)
+        axs[0].spines["right"].set_visible(False)
+        axs[0].spines["bottom"].set_visible(False)
+
+        # add text to bars
+        for j, feature in enumerate(important_features):
+            value = importance_dict[feature]
+            axs[0].text(
+                value,
+                j,
+                f"{value:.2f}",
+                ha="right" if value < 0 else "left",
+                va="center",
+                color="black",
+                fontsize=12,
+            )
+        # increase xlim to have space for the text
+        xrange = imp.max() - imp.min()
+        pad = 0.23
+        xmin = imp.min() - pad * xrange
+        xmax = imp.max() + pad * xrange
+        axs[0].set_xlim(xmin, xmax)
+        axs[0].set_title("SHAP")
+
+        # get feature values
+        important_features = important_features[::-1]
+        X_preprocess.columns = self.feature_names
+        values = X_preprocess[important_features].values[0].tolist()
+        # return features to original scale
+        scaled_features = self.preprocess[2].transformers_[0][2]
+        for i, feature in enumerate(important_features):
+            if feature in scaled_features:
+                scaler = self.preprocess[2].transformers_[0][1]
+                idx = scaled_features.index(feature)
+                mu = scaler.mean_[idx]
+                sigma = scaler.scale_[idx]
+                values[i] = values[i] * sigma + mu
+
+        # return categorical features to string values
+        for i, feature in enumerate(important_features):
+            if feature in self.categoric_features:
+                idx = self.categoric_features.index(feature)
+                values[i] = self.categories_mapping[idx][int(values[i])]
+
+        # plot a table with feature values
+        values = [np.round(x, 2) if isinstance(x, float) else x for x in values]
+        table_data = np.array([values]).T
+        table = axs[1].table(
+            cellText=table_data,
+            rowLabels=important_features,
+            loc="center",
+            colWidths=[0.3],
+            fontsize=14,
+        )
+        axs[1].axis("off")
+
+        # color the table
+        for j, feature in enumerate(important_features):
+            value = importance_dict[feature]
+            table[(j, 0)].set_facecolor(neg_color if value < 0 else pos_color)
+            table[(j, -1)].set_facecolor(neg_color if value < 0 else pos_color)
+
+        plt.tight_layout()
+        plt.show()
+
 
 class LimePipelineExplainer:
     def __init__(
@@ -222,3 +322,102 @@ class LimePipelineExplainer:
             X_preprocess.values.flatten(), pred_fn
         )
         return explanation
+
+    def plot_explanation(self, X):
+        def filter_columns(importances, top_k=5):
+            if len(importances) == 1:
+                v = np.abs(importances.values[0])
+                return importances.columns[v.argsort()[::-1]][0:top_k].tolist()
+            else:
+                v = np.mean(np.abs(importances.values), axis=0)
+                return importances.columns[v.argsort()[::-1]][0:top_k].tolist()
+
+        X_preprocess = self.preprocess.transform(X)
+        prob = self.model.predict_proba(X_preprocess)[0, 1]
+        explanation = self(X)
+
+        fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(10, 5))
+        plt.suptitle(f"prob = {prob:.2f}")
+        pos_color = "#80b1d3"
+        neg_color = "#fccde5"
+
+        # get most important features
+        important_features = filter_columns(explanation, 7)
+        important_features = important_features[::-1]
+        imp = explanation[important_features].values[0]
+        importance_dict = dict(zip(important_features, imp))
+
+        # create barplot
+        axs[0].barh(
+            important_features,
+            imp,
+            color=[neg_color if x < 0 else pos_color for x in imp],
+        )
+        # draw a line in 0
+        axs[0].axvline(0, color="#606060", lw=1)
+
+        # remove axis
+        axs[0].spines["top"].set_visible(False)
+        axs[0].spines["right"].set_visible(False)
+        axs[0].spines["bottom"].set_visible(False)
+
+        # add text to bars
+        for j, feature in enumerate(important_features):
+            value = importance_dict[feature]
+            axs[0].text(
+                value,
+                j,
+                f"{value:.2f}",
+                ha="right" if value < 0 else "left",
+                va="center",
+                color="black",
+                fontsize=12,
+            )
+        # increase xlim to have space for the text
+        xrange = imp.max() - imp.min()
+        pad = 0.23
+        xmin = imp.min() - pad * xrange
+        xmax = imp.max() + pad * xrange
+        axs[0].set_xlim(xmin, xmax)
+        axs[0].set_title("SHAP")
+
+        # get feature values
+        important_features = important_features[::-1]
+        X_preprocess.columns = self.feature_names
+        values = X_preprocess[important_features].values[0].tolist()
+        # return features to original scale
+        scaled_features = self.preprocess[2].transformers_[0][2]
+        for i, feature in enumerate(important_features):
+            if feature in scaled_features:
+                scaler = self.preprocess[2].transformers_[0][1]
+                idx = scaled_features.index(feature)
+                mu = scaler.mean_[idx]
+                sigma = scaler.scale_[idx]
+                values[i] = values[i] * sigma + mu
+
+        # return categorical features to string values
+        for i, feature in enumerate(important_features):
+            if feature in self.categoric_features:
+                idx = self.feature_names.index(feature)
+                values[i] = self.categories_mapping[idx][int(values[i])]
+
+        # plot a table with feature values
+        values = [np.round(x, 2) if isinstance(x, float) else x for x in values]
+        table_data = np.array([values]).T
+        table = axs[1].table(
+            cellText=table_data,
+            rowLabels=important_features,
+            loc="center",
+            colWidths=[0.3],
+            fontsize=14,
+        )
+        axs[1].axis("off")
+
+        # color the table
+        for j, feature in enumerate(important_features):
+            value = importance_dict[feature]
+            table[(j, 0)].set_facecolor(neg_color if value < 0 else pos_color)
+            table[(j, -1)].set_facecolor(neg_color if value < 0 else pos_color)
+
+        plt.tight_layout()
+        plt.show()
