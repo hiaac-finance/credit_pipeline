@@ -69,6 +69,9 @@ class PartialDependencePipeline:
             method="brute",
         )
 
+        # get deciles for the feature
+        deciles = np.percentile(X_preprocess[feature], np.arange(4, 96, 2))
+
         # transform back to original scale
         scaled_features = self.preprocess[2].transformers_[0][2]
         if feature in scaled_features:
@@ -77,9 +80,12 @@ class PartialDependencePipeline:
             mu = scaler.mean_[idx]
             sigma = scaler.scale_[idx]
             importance["values"][0] = importance["values"][0] * sigma + mu
+            deciles = deciles * sigma + mu
+
         return {
             "values": importance["values"][0],
             "prediction": importance[self.kind][0],
+            "deciles": deciles,
         }
 
 
@@ -103,8 +109,8 @@ class ShapPipelineExplainer:
     ):
         self.method_explain = method_explain
         self.threshold = threshold
-        self.preprocess = pipeline[:-1]
-        self.model = pipeline[-1]
+        self.preprocess = pipeline[:3]
+        self.model = pipeline[3:]
         self.categoric_features = self.preprocess[1].transformers_[1][2]
         self.categories_mapping = [
             dict(enumerate(x))
@@ -112,15 +118,6 @@ class ShapPipelineExplainer:
         ]
         X_preprocess = self.preprocess.transform(background_samples)
         self.feature_names = X_preprocess.columns.tolist()
-        for i in range(len(self.feature_names)):
-            for j, col in enumerate(self.categoric_features):
-                if col in self.feature_names[i]:
-                    updated_col = self.feature_names[i].split("_")
-                    digit = int(updated_col[-1])
-                    updated_col = "_".join(updated_col[:-1])
-                    self.feature_names[i] = (
-                        updated_col + "=" + self.categories_mapping[j][digit]
-                    )
 
         if self.method_explain == "prob":
             wrap_model = lambda x: self.model.predict_proba(x)[:, 1]
@@ -163,7 +160,6 @@ class LimePipelineExplainer:
         self.preprocess = pipeline[:3]
         self.model = pipeline[3:]
         X_preprocess = self.preprocess.transform(background_samples)
-        # self.categoric_features = sum([self.preprocess[1].transformers_[i][2] for i in [1, 2]], [])
         self.categoric_features = self.preprocess[1].transformers_[1][2]
         self.feature_names = X_preprocess.columns.tolist()
         self.categoric_features_idx = [
@@ -174,14 +170,6 @@ class LimePipelineExplainer:
             self.categories_mapping[idx] = (
                 self.preprocess[1].transformers_[1][1].categories_[i].tolist()
             )
-
-        self.feature_full_names = []
-        for i, feat in enumerate(self.feature_names):
-            if i in self.categories_mapping:
-                for j, cat in enumerate(self.categories_mapping[i]):
-                    self.feature_full_names.append(feat + "=" + str(cat))
-            else:
-                self.feature_full_names.append(feat)
 
         self.explainer = lime_tabular.LimeTabularExplainer(
             X_preprocess.values,
@@ -199,13 +187,13 @@ class LimePipelineExplainer:
             # transform X back to a dataframe
             X_df = pd.DataFrame(X, columns=self.feature_names)
             if self.method_explain == "prob":
-                return self.model.predict_proba(X_df)[:, 1]
+                return self.model.predict_proba(X_df)
             elif self.method_explain == "pred":
-                return self.model.predict_proba(X_df)[:, 1] > self.threshold
+                return self.model.predict_proba(X_df) > self.threshold
 
         X_preprocess = self.preprocess.transform(X)
         n = X_preprocess.shape[0]
-        explanation_dict = dict([(f, np.zeros(n)) for f in self.feature_full_names])
+        explanation_dict = dict([(f, np.zeros(n)) for f in self.feature_names])
         for i in range(n):
             explanation = self.explainer.explain_instance(
                 X_preprocess.values[i, :].flatten(),
@@ -214,6 +202,8 @@ class LimePipelineExplainer:
             )
 
             for f, v in explanation.as_list():
+                if "=" in f:
+                    f = f.split("=")[0]
                 explanation_dict[f][i] = v
         return pd.DataFrame(explanation_dict)
 
