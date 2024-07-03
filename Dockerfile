@@ -48,7 +48,10 @@ RUN pip install numpy \
     scikit-lego[cvxpy] \
     fairlearn \
     shap \
-    lime
+    lime \
+    dice-ml \
+    xxhash \
+    git+https://github.com/visual-ds/cfmining.git
 
 # Install jupyter
 RUN pip install jupyter \
