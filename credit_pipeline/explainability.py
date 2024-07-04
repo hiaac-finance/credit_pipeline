@@ -212,7 +212,8 @@ class ShapPipelineExplainer:
         xmin = imp.min() - pad * xrange
         xmax = imp.max() + pad * xrange
         axs[0].set_xlim(xmin, xmax)
-        axs[0].set_title("SHAP")
+        axs[0].set_title("SHAP Values")
+        axs[0].set_xticks([])
 
         # get feature values
         important_features = important_features[::-1]
@@ -232,7 +233,9 @@ class ShapPipelineExplainer:
         for i, feature in enumerate(important_features):
             if feature in self.categoric_features:
                 idx = self.categoric_features.index(feature)
-                values[i] = self.categories_mapping[idx][int(values[i])]
+                text =self.categories_mapping[idx][int(values[i])]
+                text = text[:10] + "..." if len(text) > 10 else text # truncate text if too long
+                values[i] = text
 
         # plot a table with feature values
         values = [np.round(x, 2) if isinstance(x, float) else x for x in values]
@@ -253,7 +256,7 @@ class ShapPipelineExplainer:
             table[(j, -1)].set_facecolor(neg_color if value < 0 else pos_color)
 
         plt.tight_layout()
-        plt.show()
+        # plt.show()
 
 
 class LimePipelineExplainer:
@@ -399,7 +402,8 @@ class LimePipelineExplainer:
         xmin = imp.min() - pad * xrange
         xmax = imp.max() + pad * xrange
         axs[0].set_xlim(xmin, xmax)
-        axs[0].set_title("SHAP")
+        axs[0].set_title("Coefficients")
+        axs[0].set_xticks([])
 
         # get feature values
         important_features = important_features[::-1]
@@ -419,7 +423,9 @@ class LimePipelineExplainer:
         for i, feature in enumerate(important_features):
             if feature in self.categoric_features:
                 idx = self.feature_names.index(feature)
-                values[i] = self.categories_mapping[idx][int(values[i])]
+                text =self.categories_mapping[idx][int(values[i])]
+                text = text[:10] + "..." if len(text) > 10 else text # truncate text if too long
+                values[i] = text
 
         # plot a table with feature values
         values = [np.round(x, 2) if isinstance(x, float) else x for x in values]
@@ -440,4 +446,4 @@ class LimePipelineExplainer:
             table[(j, -1)].set_facecolor(neg_color if value < 0 else pos_color)
 
         plt.tight_layout()
-        plt.show()
+        # plt.show()
