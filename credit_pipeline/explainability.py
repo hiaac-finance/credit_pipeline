@@ -112,10 +112,15 @@ class ShapPipelineExplainer:
         self.threshold = threshold
         self.preprocess = pipeline[:3]
         self.model = pipeline[3:]
-        self.categoric_features = self.preprocess[1].transformers_[1][2]
+        self.categoric_features = self.preprocess[1].transformers_[1][2].copy()
+        self.categoric_features += self.preprocess[1].transformers_[2][2].copy()
         self.categories_mapping = [
             dict(enumerate(x))
             for x in self.preprocess[1].transformers_[1][1].categories_
+        ]
+        self.categories_mapping += [
+            dict(enumerate(x))
+            for x in self.preprocess[1].transformers_[2][1].unique_values.values()
         ]
         X_preprocess = self.preprocess.transform(background_samples)
         self.feature_names = X_preprocess.columns.tolist()
@@ -260,16 +265,31 @@ class LimePipelineExplainer:
         self.preprocess = pipeline[:3]
         self.model = pipeline[3:]
         X_preprocess = self.preprocess.transform(background_samples)
-        self.categoric_features = self.preprocess[1].transformers_[1][2]
+        self.categoric_features = self.preprocess[1].transformers_[1][2].copy()
+        self.categoric_features += self.preprocess[1].transformers_[2][2].copy()
         self.feature_names = X_preprocess.columns.tolist()
         self.categoric_features_idx = [
             i for i, f in enumerate(self.feature_names) if f in self.categoric_features
         ]
         self.categories_mapping = {}
         for i, idx in enumerate(self.categoric_features_idx):
-            self.categories_mapping[idx] = (
-                self.preprocess[1].transformers_[1][1].categories_[i].tolist()
-            )
+            categoric_feature = self.feature_names[idx]
+            if categoric_feature in self.preprocess[1].transformers_[1][2]:
+                self.categories_mapping[idx] = (
+                    self.preprocess[1]
+                    .transformers_[1][1]
+                    .categories_[i]
+                    .tolist()
+                    .copy()
+                )
+            else:
+                self.categories_mapping[idx] = (
+                    self.preprocess[1]
+                    .transformers_[2][1]
+                    .unique_values[categoric_feature]
+                    .tolist()
+                    .copy()
+                )
 
         self.explainer = lime_tabular.LimeTabularExplainer(
             X_preprocess.values,
