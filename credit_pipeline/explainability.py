@@ -5,6 +5,11 @@ from sklearn.inspection import partial_dependence
 from sklearn.base import BaseEstimator, ClassifierMixin
 from lime import lime_tabular
 import shap
+import cfmining.algorithms as alg
+from cfmining.action_set import ActionSet
+import cfmining.criteria as crit
+import dice_ml
+import json
 
 
 class PartialDependencePipeline:
@@ -233,8 +238,10 @@ class ShapPipelineExplainer:
         for i, feature in enumerate(important_features):
             if feature in self.categoric_features:
                 idx = self.categoric_features.index(feature)
-                text =self.categories_mapping[idx][int(values[i])]
-                text = text[:10] + "..." if len(text) > 10 else text # truncate text if too long
+                text = self.categories_mapping[idx][int(values[i])]
+                text = (
+                    text[:10] + "..." if len(text) > 10 else text
+                )  # truncate text if too long
                 values[i] = text
 
         # plot a table with feature values
@@ -423,8 +430,10 @@ class LimePipelineExplainer:
         for i, feature in enumerate(important_features):
             if feature in self.categoric_features:
                 idx = self.feature_names.index(feature)
-                text =self.categories_mapping[idx][int(values[i])]
-                text = text[:10] + "..." if len(text) > 10 else text # truncate text if too long
+                text = self.categories_mapping[idx][int(values[i])]
+                text = (
+                    text[:10] + "..." if len(text) > 10 else text
+                )  # truncate text if too long
                 values[i] = text
 
         # plot a table with feature values
@@ -447,3 +456,188 @@ class LimePipelineExplainer:
 
         plt.tight_layout()
         # plt.show()
+
+
+class MAPOCAM:
+    def __init__(
+        self,
+        pipeline,
+        X,
+        mutable_features,
+        target,
+        max_changes=3,
+        criteria="percentile",
+        step_size=0.01,
+        threshold=0.5,
+    ):
+        class HelperClassifier:
+            def __init__(
+                self,
+                pipeline,
+                target=1,
+                monotone=False,
+                threshold=0.5,
+                feat_importance=None,
+            ):
+                self.model = pipeline[2:]
+                self.feature_names = pipeline[:2].get_feature_names_out().tolist()
+                self.target = target
+                self.monotone = monotone
+                self.threshold = threshold
+                self.feat_importance = feat_importance
+
+            def predict_proba(self, X):
+                X_ = pd.DataFrame([X], columns=self.feature_names)
+                prob = self.model.predict_proba(X_)[0, self.target]
+                return prob
+
+        self.preprocess = pipeline[:2]
+        self.model = pipeline[2:]
+        self.all_features = self.preprocess.get_feature_names_out().tolist()
+        self.mutable_features = mutable_features
+        categoric_features = (
+            pipeline[1].transformers_[1][2].copy()
+            + pipeline[1].transformers_[2][2].copy()
+        )
+        for col in mutable_features:
+            assert not col in categoric_features
+
+        feat_importance = [0 for _ in self.all_features]
+        # check if model is a logistic regression
+        from sklearn.linear_model import LogisticRegression
+
+        is_logistic = False
+        if isinstance(pipeline[-1], LogisticRegression):
+            is_logistic = True
+            # utilize coefficients as feature importance
+            model_features = self.model[-2].get_feature_names_out().tolist()
+            coefs = pipeline[-1].coef_[0]
+            for i, col in enumerate(self.all_features):
+                if col in mutable_features:
+                    idx = model_features.index(col)
+                    feat_importance[i] = coefs[idx]
+
+
+        X_preprocess = self.preprocess.transform(X)
+        # little fix for cols with 0 variance
+        for col in X_preprocess.columns:
+            lb = np.percentile(X_preprocess[col], 1)
+            ub = np.percentile(X_preprocess[col], 99)
+            if lb == ub:
+                X_preprocess[col] = X_preprocess[col] + np.random.normal(
+                    0, 0.0001, X_preprocess.shape[0]
+                )
+
+        #for col in X_preprocess.columns:
+        #    print(col, X_preprocess[col].unique())
+        
+        self.action_set = ActionSet(X=X_preprocess, default_bounds = (0, 100, "percentile"))
+
+           
+        for i, feat in enumerate(self.action_set):
+            if not feat.name in self.mutable_features:
+                feat.mutable = False
+            direction = 1 if feat_importance[i] < 0 else -1
+            feat.step_size = step_size
+            feat.flip_direction = direction
+            feat.step_direction = direction
+            feat.update_grid()
+
+        self.predictor = HelperClassifier(
+            pipeline,
+            target,
+            monotone=is_logistic,
+            threshold=threshold,
+            feat_importance=np.abs(feat_importance),
+        )
+        if criteria == "percentile":
+            perc_calc = crit.PercentileCalculator(action_set=self.action_set)
+            self.criteria = lambda x: crit.PercentileCriterion(x, perc_calc)
+        elif criteria == "percentile_changes":
+            perc_calc = crit.PercentileCalculator(action_set=self.action_set)
+            self.criteria = lambda x: crit.PercentileChangesCriterion(x, perc_calc)
+        elif criteria == "non_dom":
+            self.criteria = lambda x: crit.NonDomCriterion(
+                [feat.flip_direction for feat in self.action_set]
+            )
+        else:
+            raise ValueError(
+                "criteria must be in ['percentile', 'percentile_changes', 'non_dom']"
+            )
+        self.max_changes = max_changes
+
+    def fit(self, individual):
+        individual_ = self.preprocess.transform(individual).values.flatten()
+        method = alg.MAPOCAM(
+            self.action_set,
+            individual_,
+            self.predictor,
+            max_changes=self.max_changes,
+            compare=self.criteria(individual_),
+        )
+        method.fit()
+        return method.solutions
+
+
+class Dice:
+    """Wrapper function for Dice algorithm, fit expects an individual and can be called multiple times.
+
+
+    Parameters
+    ----------
+    X : DataFrame
+        Dataframe with model features
+    Y : np.ndarray or pd.Series
+        Classifier target
+    model : GeneralClassifier
+        Sklearn classifier
+    n_cfs : int
+        Number of counterfactuals to generate
+    mutable_features: list
+        List of features that can be used on conterfactuals
+    sparsity_weight: float
+        Parameter, weight for sparsity in optimization problem
+    """
+
+    def __init__(self, X, Y, pipeline, n_cfs, mutable_features, sparsity_weight=0.2):
+        self.total_CFs = n_cfs
+        self.sparsity_weight = sparsity_weight
+        self.mutable_features = mutable_features
+        X_preprocess = pipeline[:2].transform(X)
+        self.features = X_preprocess.columns.tolist()
+        self.categoric_features = (
+            pipeline[1].transformers_[1][2].copy()
+            + pipeline[1].transformers_[2][2].copy()
+        )
+        self.continuous_features = [col for col in self.features if col not in self.categoric_features]
+        self.preprocess = pipeline[:2]
+        self.model = pipeline[2:]
+        dice_model = dice_ml.Model(
+            model=self.model, backend="sklearn", model_type="classifier"
+        )
+        X_extended = X_preprocess.copy()
+        X_extended["target"] = Y
+        dice_data = dice_ml.Data(
+            dataframe=X_extended,
+            continuous_features=self.continuous_features,
+            outcome_name="target",
+        )
+        self.exp = dice_ml.Dice(dice_data, dice_model)
+
+    def fit(self, individual):
+        if type(individual) == np.ndarray:
+            individual = pd.DataFrame(data=[individual], columns=self.features)
+        individual_ = self.preprocess.transform(individual)
+        dice_exp = self.exp.generate_counterfactuals(
+            individual_,
+            total_CFs=self.total_CFs,
+            desired_class="opposite",
+            sparsity_weight=self.sparsity_weight,
+            features_to_vary=self.mutable_features,
+        )
+        solutions = json.loads(dice_exp.to_json())["cfs_list"][0]
+        solutions = [solution[:-1] for solution in solutions]
+        if len(solutions) > 0:
+            if isinstance(solutions[0], np.ndarray):
+                solutions = [s.tolist() for s in solutions]
+        return solutions
