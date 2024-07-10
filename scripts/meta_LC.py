@@ -154,7 +154,7 @@ detailed_logger.debug(args)
 
 load_path = f'{ri_datasets_path}Load/{main_seed}_{year}'
 
-if Path(f'{load_path}').exists():# and False:
+if Path(f'{load_path}').exists() and False:
     df_train = pd.read_csv(f'{load_path}/A_train.csv', index_col=0)
     df_val = pd.read_csv(f'{load_path}/A_val.csv', index_col=0)
     df_test = pd.read_csv(f'{load_path}/A_test.csv', index_col=0)
