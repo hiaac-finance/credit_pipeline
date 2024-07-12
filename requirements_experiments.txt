@@ -1,8 +1,17 @@
-pandas
 numpy
 matplotlib
+pandas==2.0.3
 seaborn
-scikit-learn
+tensorflow
+chardet
+scikit-learn==1.4.0
 optuna
-lightgbm
+lightgbm==4.3.0
+aif360
+fairgbm
+scikit-lego[cvxpy]
+fairlearn
+jupyter
+jupyterlab
+notebook
    

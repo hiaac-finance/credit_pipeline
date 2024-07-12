@@ -60,8 +60,15 @@ hyperparam_spaces = {
             "type": "categorical",
         },
         "learning_rate_init": {"low": 0.001, "high": 0.1, "type": "float", "log": True},
-        "early_stopping": {"choices": [True], "type": "categorical"},
-        "max_iter": {"choices": [50], "type": "categorical"},
+        "learning_rate_decay_rate": {
+            "low": 0.1,
+            "high": 1,
+            "type": "float",
+        },
+        "alpha": {"low": 1e-3, "high": 1e3, "type": "float", "log": True},
+        "epochs": {"low": 10, "high": 100, "type": "int", "step": 10},
+        "class_weight": {"choices": [None, "balanced"], "type": "categorical"},
+        "batch_size" : {"low" : 128, "high" : 128, "type" : "int"}
     },
 }
 

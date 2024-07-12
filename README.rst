@@ -4,7 +4,7 @@ Credit Pipeline
 A general pipeline for Trustworthy Machine Learning on credit datasets,
 including functionalities for fairness, reject inference, and
 explainability. The package facilitates the development of more ethical
-algorithms at all the steps of the machine learning pipeline.
+algorithms at every step of the ML pipeline for credit modelling.
 
 Install
 -------
@@ -29,43 +29,11 @@ To preprocess the data use the following command at the root folder of the repos
 Usage
 -----
 
-Examples of using the diverse functionalities package are located in
-Jupyter Notebooks at ``examples/``. The necessary data is also presented in the folder ``data/``.
- We now briefly describe the functions.
+The package is distributed with a Dockerfile that can be used to run the code in a container, using the same environment as the one used for development. The Dockerfile is located at the root of the repository, including commands to build and run the container. (Note: it is recommended to have prior knowledge of Docker to use this feature.)
 
-Data Exploration
-~~~~~~~~~~~~~~~~
+One can also use the packaged in a conda environment with installed dependencies. 
 
-Exemplified at the file ``examples/data_exploration.ipynb``, a diverse set of functions is present that is able to deal with
-missing values, identify categorical and numerical features, and more sophisticated tasks such as identifying outliers, looking
-for correlation, calculating mutual information.
-
-Credit Models
-~~~~~~~~~~~~~
-
-Considering three open credit scoring datasets (Home Credit, Taiwan, and German), we provide documentation of our experiments
-using Logistic Regression, Neural Networks, Random Forest, and Gradient Boosting. Each experiment is located in Python notebooks
-within the folder ``examples/`` with the name of the dataset.
-
-Fairness
-~~~~~~~~
-
-Our code presents a comparison of a pre-processing, three in-processing, and one post-processing fairness metric.
-The mitigation techniques are performed with all three datasets and inside each of the notebooks in ``examples/`` folder.
-
-Reject Inference
-~~~~~~~~~~~~~~~~
-
-Our code also presents a comparison of different reject inference techniques, with the approach of augmentation, extrapolation
-, and label spreading. These experiments are present in the notebook ``examples/reject_inference.ipynb`` only with the HomeCredit dataset.
-This was necessary as a special data treatment was needed to simulate a scenario of reject inference.
-
-Explainability
-~~~~~~~~~~~~~~
-
-Explainability experiments were performed using the German dataset and are localized in the notebook ``examples/german.ipynb``.
-Global and local interpretability techniques were used to demonstrate the advantages and pitfalls of each one.
-
+Examples of using the diverse functionalities package are located in Jupyter Notebooks at ``examples/usage.ipynb`` (WIP).
 
 Contact
 -------
