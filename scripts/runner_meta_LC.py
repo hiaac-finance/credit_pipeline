@@ -49,23 +49,23 @@ def run_command(cmd):
     # seeds = [120054, 388388, 570334, 907360, 938870]
     # percent_bads = [0.07, 0.08, 0.09, 0.1, 0.12, 0.13, 0.14, 0.15, 0.16, 0.18, 0.2, 0.22, 0.24, 0.26, 0.28, 0.3, 0.32, 0.36, 0.4]
     # sizes = [1000, 5000, 10000]
-    # contaminations = [0.12, ]
+    # contaminations = [0.12,]
 
 def main():
     # Define argument values to iterate over
     ar_ranges = [(0, 100)]
     weights = [(1, 1)]
-    years = [2010]
-    seeds = [388388]
-    percent_bads = [0.28]
+    years = [2009]
+    seeds = [1]
+    percent_bads = [0.06]
     sizes = [1000]
-    contaminations = [0.12, ]
+    contaminations = [0.12,]
     # For boolean flags, use a tuple with the argument name and a boolean to indicate if it should be included
-    use_test_flags = [('--use_test', True)]
+    use_test_flags = [('--use_test', False)]
     train_ri_flags = [('--train_ri', True)] 
     reuse_exec_flags = [('--reuse_exec', False)]
     train_tn_flags = [('--train_tn', True)]
-    eval_ri_flags = [('--eval_ri', False)]
+    eval_ri_flags = [('--eval_ri', True)]
 
 
     experiments = itertools.product(
@@ -83,7 +83,7 @@ def main():
     ):
         seed = seed + (year - 2009)
         cmd = [
-            'python3', 'meta_LC.py',
+            'python3', 'meta_LC exp.py',
             '--ar_range', str(ar_range[0]), str(ar_range[1]),
             '--weights', str(weight[0]), str(weight[1]),
             '--seed', str(seed),

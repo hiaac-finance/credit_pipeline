@@ -176,7 +176,7 @@ def accept_reject_split(X,y, policy_clf, threshold = 0.4):
 
 #Metrics
 
-def calculate_kickout_metric(C1, C2, X_test_acp, y_test_acp, X_test_unl, acp_rate = 0.15):
+def calculate_kickout_metric(C1, C2, X_test_acp, y_test_acp, X_test_unl, acp_rate = 0.5):
     # Calculate predictions and obtain subsets A1_G and A1_B
     num_acp_1 = int(len(X_test_acp) * acp_rate) #number of Accepts
     y_prob_1 = C1.predict_proba(X_test_acp)[:, 1]
@@ -299,7 +299,7 @@ def calculate_approval_rate(C1, X_val, y_val, X_test):
     return n_approved/X_test.shape[0]
 
 def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
-                   X_unl = None, threshold_type = 'ks', acp_rate = 0.05):
+                   X_unl = None, threshold_type = 'ks', acp_rate = 0.5):
     def get_best_threshold_with_ks(model, X, y):
         y_probs = model.predict_proba(X)[:,1]
         fpr, tpr, thresholds = roc_curve(y, y_probs)
@@ -445,12 +445,11 @@ def expand_dataset(X_train, y_train, X_unl,
                         ):
     # get_shapes([X_train, y_train, X_unl, y_unl, X_test, y_test])
     params_dict['LightGBM_2'].update({'random_state': seed})
-
+    # print(X_unl.shape[0])
     if X_unl.shape[0] < 1:
         return X_train, y_train, X_unl, False
 
     iso_params = {"contamination":contamination_threshold, "random_state":seed}
-
     rotulator = tr.create_pipeline(X_train, y_train, rot_class(**rot_params),
                                     onehot=True, normalize=True, do_EBE=True)
     rotulator.fit(X_train, y_train)
@@ -568,7 +567,7 @@ def expand_dataset(X_train, y_train, X_unl,
 
     intersection = X_retrieved_0.index.intersection(X_retrieved_1.index)
     if len(intersection) > 0:
-        logging.debug(f'intersection = {len(intersection)}')
+        print(f'intersection = {len(intersection)}')
         X_retrieved_0 = X_retrieved_0.drop(intersection)
         y_retrieved_0 = y_retrieved_0.drop(intersection)
 
