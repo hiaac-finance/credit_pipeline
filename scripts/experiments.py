@@ -39,6 +39,13 @@ PROTECTED_ATTRIBUTES = {
     "taiwan": "SEX",
     "homecredit": "CODE_GENDER",
 }
+SENSITIVE_ATTRIBUTES = {
+    "german": ["Gender"],
+    "taiwan": ["SEX"],
+    "homecredit": [
+        "CODE_GENDER",
+    ],
+}
 
 HOMECREDIT_PARAM_SPACE = training.hyperparam_spaces.copy()
 HOMECREDIT_PARAM_SPACE["LogisticRegression"]["solver"] = {
@@ -78,7 +85,7 @@ FAIRNESS_PARAM_SPACES["DemographicParityClassifier"] = FAIRNESS_PARAM_SPACES[
 FAIRNESS_GOAL = {"german": 0.1, "taiwan": 0.1, "homecredit": 0.1}
 
 
-def load_split(dataset_name, fold, seed=0):
+def load_split(dataset_name, fold, seed=0, unaware=False):
     """Function that loads the dataset and splits it into train and test. Following, splits the train set into train and validation using 10-fold cross validation.
 
     Parameters
@@ -100,15 +107,34 @@ def load_split(dataset_name, fold, seed=0):
     Y_train_ = train["DEFAULT"]
     X_test = test.drop(columns=["DEFAULT"])
     Y_test = test["DEFAULT"]
+
+    if dataset_name == "homecredit":
+        A_train_ = X_train_.CODE_GENDER == "M"
+        A_test = X_test.CODE_GENDER == "M"
+    elif dataset_name == "taiwan":
+        A_train_ = X_train_.SEX == "Male"
+        A_test = X_test.SEX == "Male"
+    elif dataset_name == "german":
+        A_train_ = X_train_.Gender == "Male"
+        A_test = X_test.Gender == "Male"
+    A_train_ = A_train_.astype(int)
+    A_test = A_test.astype(int)
+
+    if unaware:
+        X_train_ = X_train_.drop(columns=SENSITIVE_ATTRIBUTES[dataset_name])
+        X_test = X_test.drop(columns=SENSITIVE_ATTRIBUTES[dataset_name])
+
     kf = KFold(n_splits=10, shuffle=True, random_state=seed)
     for i, (train_index, val_index) in enumerate(kf.split(X_train_)):
         if i == fold:
             X_train = X_train_.iloc[train_index]
+            A_train = A_train_.iloc[train_index]
             Y_train = Y_train_.iloc[train_index]
             X_val = X_train_.iloc[val_index]
+            A_val = A_train_.iloc[val_index]
             Y_val = Y_train_.iloc[val_index]
             break
-    return X_train, Y_train, X_val, Y_val, X_test, Y_test
+    return X_train, A_train, Y_train, X_val, A_val, Y_val, X_test, A_test, Y_test
 
 
 def experiment_credit_models(args):
@@ -120,25 +146,14 @@ def experiment_credit_models(args):
     ----------
         args (dict): arguments for the experiment
     """
-    path = f"../results/credit_models/{args['dataset']}"
+    path = f"../results/credit_models_unaware/{args['dataset']}"
 
     for fold in range(10):
         Path(f"{path}/{fold}").mkdir(parents=True, exist_ok=True)
         print("Fold: ", fold)
-        X_train, Y_train, X_val, Y_val, X_test, Y_test = load_split(
-            args["dataset"], fold, args["seed"]
+        X_train, A_train, Y_train, X_val, A_val, Y_val, X_test, A_test, Y_test = (
+            load_split(args["dataset"], fold, args["seed"], unaware=True)
         )
-        # Workaround to obtain the protected attribute as a binary column
-        if args["dataset"] == "homecredit":  # Small fix to not apply EBE to gender
-            pipeline_preprocess = training.create_pipeline(X_train, Y_train, crit=4)
-        else:
-            pipeline_preprocess = training.create_pipeline(X_train, Y_train)
-        pipeline_preprocess.fit(X_train, Y_train)
-        X_train_preprocessed = pipeline_preprocess.transform(X_train)
-        A_train = X_train_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
-        X_test_preprocessed = pipeline_preprocess.transform(X_test)
-        A_test = X_test_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
-        del X_train_preprocessed, X_test_preprocessed, pipeline_preprocess
 
         for model_class in MODEL_CLASS_LIST:
             print("Model: ", model_class.__name__)
@@ -163,6 +178,8 @@ def experiment_credit_models(args):
             threshold = training.ks_threshold(Y_train, Y_pred)
             model_dict = {model_class.__name__: [model, threshold]}
             metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
+            Y_test_pred = (model.predict_proba(X_test)[:, 1] > threshold).astype(int)
+            model_dict = {model_class.__name__: Y_test_pred}
             fairness_metrics = evaluate.get_fairness_metrics(
                 model_dict, X_test, Y_test, A_test
             )
@@ -221,9 +238,14 @@ def experiment_fairness(args):
     for fold in range(10):
         Path(f"{path}/{fold}").mkdir(parents=True, exist_ok=True)
         print("Fold: ", fold)
-        X_train, Y_train, X_val, Y_val, X_test, Y_test = load_split(
+        X_train, _, Y_train, X_val, _, Y_val, X_test, _, Y_test = load_split(
             args["dataset"], fold, args["seed"]
         )
+
+        scorer_validation = evaluate.create_fairness_scorer(
+            FAIRNESS_GOAL[args["dataset"]], A_val, benefit_class=0
+        )
+
         # Workaround to obtain the protected attribute as a binary column
         if args["dataset"] == "homecredit":  # Small fix to not apply EBE to gender
             pipeline_preprocess = training.create_pipeline(X_train, Y_train, crit=4)
@@ -238,7 +260,7 @@ def experiment_fairness(args):
         A_test = X_test_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
 
         scorer_validation = evaluate.create_fairness_scorer(
-            FAIRNESS_GOAL[args["dataset"]], A_val, benefit_class = 0
+            FAIRNESS_GOAL[args["dataset"]], A_val, benefit_class=0
         )
 
         if "Reweighing" in FAIRNESS_CLASS_LIST:
@@ -282,8 +304,12 @@ def experiment_fairness(args):
                 threshold = training.ks_threshold(Y_train, Y_train_score)
                 model_dict = {"rw_" + model_class.__name__: [model, threshold]}
                 metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
+                Y_test_pred = (model.predict_proba(X_test)[:, 1] > threshold).astype(
+                    int
+                )
+                model_dict = {"rw_" + model_class.__name__: Y_test_pred}
                 fairness_metrics = evaluate.get_fairness_metrics(
-                    model_dict, X_test, Y_test, A_test, benefit_class = 0
+                    model_dict, X_test, Y_test, A_test, benefit_class=0
                 )
 
                 joblib.dump(model, f"{path}/{fold}/rw_{model_class.__name__}.pkl")
@@ -333,8 +359,10 @@ def experiment_fairness(args):
             threshold = training.ks_threshold(Y_train, Y_train_score)
             model_dict = {model_class.__name__: [model, threshold]}
             metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
+            Y_test_pred = (model.predict_proba(X_test)[:, 1] > threshold).astype(int)
+            model_dict = {model_class.__name__: Y_test_pred}
             fairness_metrics = evaluate.get_fairness_metrics(
-                model_dict, X_test, Y_test, A_test,  benefit_class = 0
+                model_dict, X_test, Y_test, A_test, benefit_class=0
             )
             joblib.dump(model, f"{path}/{fold}/{model_class.__name__}.pkl")
             joblib.dump(
@@ -372,8 +400,10 @@ def experiment_fairness(args):
             threshold = training.ks_threshold(Y_train, Y_train_score)
             model_dict = {model_class.__name__: [model, threshold]}
             metrics = evaluate.get_metrics(model_dict, X_test, Y_test)
+            Y_test_pred = (model.predict_proba(X_test)[:, 1] > threshold).astype(int)
+            model_dict = {model_class.__name__: Y_test_pred}
             fairness_metrics = evaluate.get_fairness_metrics(
-                model_dict, X_test, Y_test, A_test,  benefit_class = 0
+                model_dict, X_test, Y_test, A_test, benefit_class=0
             )
 
             joblib.dump(model, f"{path}/{fold}/{model_class.__name__}.pkl")
@@ -425,8 +455,10 @@ def experiment_fairness(args):
             thr_opt_helper = Thr_helper(thr_opt, A_test)
             model_dict = {"thr_" + model_class.__name__: [thr_opt_helper, None]}
             metrics = evaluate.get_metrics(model_dict, X_test_preprocessed, Y_test)
+            Y_test_pred = thr_opt.predict(X_test_preprocessed)
+            model_dict = {"thr_" + model_class.__name__: Y_test_pred}
             fairness_metrics = evaluate.get_fairness_metrics(
-                model_dict, X_test_preprocessed, Y_test, A_test,  benefit_class = 0
+                model_dict, X_test_preprocessed, Y_test, A_test, benefit_class=0
             )
             joblib.dump(thr_opt, f"{path}/{fold}/thr_{model_class.__name__}.pkl")
             metrics.to_csv(
