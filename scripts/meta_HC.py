@@ -192,8 +192,8 @@ params_dict['LightGBM_2'] = {'boosting_type': 'gbdt', 'class_weight': None,
               'is_unbalance': True}
 
 
-n_iter = 50
-# size = 1000
+n_iter = 15
+size = 250
 # p_value = 0.06
 # contamination_threshold = 0.12
 year = 2004
@@ -222,18 +222,22 @@ if use_test:
     X_eval = X_test_acp.copy()
     y_eval = y_test_acp.copy()
     R_eval = X_test_rej.copy()
-else:
-    X_eval = X_val_rej.copy()
-    y_eval = y_val_rej.copy()
-    X_eval_1, X_eval_2, y_eval_1, y_eval_2 = train_test_split(
-            X_eval,y_eval, test_size=0.5, random_state=seed_number)
-    X_eval = X_eval_1.copy()
-    y_eval = y_eval_1.copy()
-    R_eval = X_eval_2.copy()   
 # else:
-#     X_eval = X_val_acp.copy()
-#     y_eval = y_val_acp.copy()
+#     X_eval = pd.concat([X_val_acp.copy(), X_val_rej.copy()], axis=0)
+#     y_eval = pd.concat([y_val_acp.copy(), y_val_rej.copy()], axis=0)
 #     R_eval = X_val_rej.copy()
+# else:
+#     X_eval = X_val_rej.copy()
+#     y_eval = y_val_rej.copy()
+#     X_eval_1, X_eval_2, y_eval_1, y_eval_2 = train_test_split(
+#             X_eval,y_eval, test_size=0.5, random_state=seed_number)
+#     X_eval = X_eval_1.copy()
+#     y_eval = y_eval_1.copy()
+#     R_eval = X_eval_2.copy()   
+else:
+    X_eval = X_val_acp.copy()
+    y_eval = y_val_acp.copy()
+    R_eval = X_val_rej.copy()
 
 
 # dex.get_shapes(X_train, X_train_acp, X_train_rej, X_test, X_test_acp, X_test_rej, X_val, X_val_acp, X_val_rej)
@@ -280,7 +284,7 @@ if filepath_ex.exists() and reuse_exec:
 else:
     print(f'TN fitting started with seed {seed_number}')
     TNmodels, TNdata = ri.trusted_non_outliers(X_train_acp, y_train_acp, X_train_rej,
-                            X_val_acp, y_val_acp, iterations=n_iter,p = 0.07, output=-1,return_all=True,
+                            X_val_acp, y_val_acp, size=size, iterations=n_iter,p = 0.07, output=-1,return_all=True,
                             save_log=False, seed=seed_number, technique='extrapolation')
     print(f'TN fitted')
     filepath_ex.parent.mkdir(parents=True, exist_ok=True)
@@ -327,8 +331,7 @@ if eval_ri:
     df_AUK = ri.area_under_the_kick(models_dict, X_eval, y_eval, R_eval, low_AR, high_AR).mean()
     df_AUC = df_RI.loc['AUC']
     df_KS = df_RI.loc['KS']
-
-    
+    RI_unb = ri.get_metrics_RI(models_dict, pd.concat([X_val_acp, X_val_rej],axis=0), pd.concat([y_val_acp, y_val_rej],axis=0))
     if train_tn:
         # Initialize a dictionary to hold all the basic metrics for EX
         df_TN = ri.get_metrics_RI(models_ex, X_eval, y_eval, X_unl=R_eval, acp_rate=0.5)
@@ -336,9 +339,10 @@ if eval_ri:
         df_ks_ex = df_TN.loc['KS', :]
         df_kick_ex = ri.area_under_the_kick(models_ex, X_eval, y_eval, R_eval, low_AR, high_AR)
         output_ex, best_values_ex = ri.evaluate_by_AUC_AUK(models_ex,  X_eval, y_eval, R_eval, weights, criterias, low_AR, high_AR)
-        
+        TN_unb = ri.get_metrics_RI(models_ex, pd.concat([X_val_acp, X_val_rej],axis=0), pd.concat([y_val_acp, y_val_rej],axis=0))
+
         if use_test:
-            file_path = Path(os.path.join(ri_datasets_path,f'Data/TEST/TN-{year}-results-1.csv'))
+            file_path = Path(os.path.join(ri_datasets_path,f'Data/TEST/TN-{year}-results-250.csv'))
             file_path.parent.mkdir(parents=True, exist_ok=True)
         else:
             file_path = Path(os.path.join(ri_datasets_path,f'Data/VAL/TN-{year}-results-1.csv'))
@@ -356,6 +360,7 @@ if eval_ri:
             "KS": df_TN.loc['KS', f'TN_{output_ex}'],
             "Kickout": df_TN.loc['Kickout', f'TN_{output_ex}'],
             "AUK": df_kick_ex.loc[:, f'TN_{output_ex}'].mean(),
+            "unb_AUC": TN_unb.loc['AUC', f'TN_{output_ex}'],
             "Best": output_ex,
         }
 
@@ -373,6 +378,7 @@ if eval_ri:
                     "KS": df_RI.loc['KS', col],
                     "Kickout": df_RI.loc['Kickout', col],
                     "AUK": df_AUK.loc[col],
+                    "unb_AUC": RI_unb.loc['AUC', col],
                     "Best": -1,
                 }
             col_df = pd.DataFrame([new_data]).round(3)

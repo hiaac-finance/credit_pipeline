@@ -1121,6 +1121,8 @@ def extrapolation(X_train, y_train, X_unl, mode = "C", seed = seed_number):
     elif mode == "C":
         new_X_train = pd.concat([X_train,X_unl[y_prob_unl>0.8], X_unl[y_prob_unl<0.15]])
         new_y_train = pd.concat([y_train,y_label_unl_s[y_prob_unl>0.8], y_label_unl_s[y_prob_unl<0.15]])
+        print(f'new_X_train shape: {new_X_train.shape[0]}')
+        print(f'old_X_train shape: {X_train.shape[0]}')
     else:
         return {}
 
