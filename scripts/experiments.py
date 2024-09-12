@@ -82,7 +82,7 @@ FAIRNESS_PARAM_SPACES["EqualOpportunityClassifier"] = {
 FAIRNESS_PARAM_SPACES["DemographicParityClassifier"] = FAIRNESS_PARAM_SPACES[
     "EqualOpportunityClassifier"
 ].copy()
-FAIRNESS_GOAL = {"german": 0.1, "taiwan": 0.1, "homecredit": 0.1}
+FAIRNESS_GOAL = {"german": 0.05, "taiwan": 0.01, "homecredit": 0.05}
 
 
 def load_split(dataset_name, fold, seed=0, unaware=False):
@@ -235,49 +235,41 @@ def experiment_fairness(args):
         args (dict): arguments for the experiment
     """
     path = f"../results/fair_models/{args['dataset']}"
+
+    if args["dataset"] == "homecredit":
+        FAIRNESS_CLASS_LIST.remove("DemographicParityClassifier")
+        FAIRNESS_CLASS_LIST.remove("EqualOpportunityClassifier")
+
     for fold in range(10):
         Path(f"{path}/{fold}").mkdir(parents=True, exist_ok=True)
         print("Fold: ", fold)
-        X_train, _, Y_train, X_val, _, Y_val, X_test, _, Y_test = load_split(
-            args["dataset"], fold, args["seed"]
+        X_train, A_train, Y_train, X_val, A_val, Y_val, X_test, A_test, Y_test = (
+            load_split(args["dataset"], fold, args["seed"], unaware=True)
         )
 
         scorer_validation = evaluate.create_fairness_scorer(
-            FAIRNESS_GOAL[args["dataset"]], A_val, benefit_class=0
+            FAIRNESS_GOAL[args["dataset"]], A_val, M = 100, benefit_class=0
         )
 
-        # Workaround to obtain the protected attribute as a binary column
-        if args["dataset"] == "homecredit":  # Small fix to not apply EBE to gender
-            pipeline_preprocess = training.create_pipeline(X_train, Y_train, crit=4)
-        else:
-            pipeline_preprocess = training.create_pipeline(X_train, Y_train)
+        pipeline_preprocess = training.create_pipeline(X_train, Y_train, crit = 4 if args["dataset"] == "homecredit" else 3)
         pipeline_preprocess.fit(X_train, Y_train)
         X_train_preprocessed = pipeline_preprocess.transform(X_train)
-        A_train = X_train_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
-        X_val_preprocessed = pipeline_preprocess.transform(X_val)
-        A_val = X_val_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
         X_test_preprocessed = pipeline_preprocess.transform(X_test)
-        A_test = X_test_preprocessed[PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"]
-
-        scorer_validation = evaluate.create_fairness_scorer(
-            FAIRNESS_GOAL[args["dataset"]], A_val, benefit_class=0
-        )
 
         if "Reweighing" in FAIRNESS_CLASS_LIST:
             # Reweighting
             print("Model: Reweighing")
             df_rw = pd.DataFrame(X_train_preprocessed)
             df_rw["DEFAULT"] = Y_train
+            df_rw["Z"] = A_train
             X_train_aif = BinaryLabelDataset(
                 df=df_rw,
                 label_names=["DEFAULT"],
-                protected_attribute_names=[
-                    PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"
-                ],
+                protected_attribute_names=["Z"],
             )
             rw = Reweighing(
-                unprivileged_groups=[{PROTECTED_ATTRIBUTES[args["dataset"]] + "_0": 0}],
-                privileged_groups=[{PROTECTED_ATTRIBUTES[args["dataset"]] + "_0": 1}],
+                unprivileged_groups=[{"Z": 0}],
+                privileged_groups=[{"Z": 1}],
             )
             rw.fit(X_train_aif)
             rw_weights = rw.transform(X_train_aif).instance_weights
@@ -328,6 +320,10 @@ def experiment_fairness(args):
 
                 print(f"Finished training with ROC {study.best_value:.2f}")
 
+        # add "Z" as sensitive attribute (remove after this block)
+        X_train["Z"] = A_train
+        X_val["Z"] = A_val
+        X_test["Z"] = A_test
         for model_class in [DemographicParityClassifier, EqualOpportunityClassifier]:
             if not model_class.__name__ in FAIRNESS_CLASS_LIST:
                 continue
@@ -335,12 +331,16 @@ def experiment_fairness(args):
             print("Model: ", model_class.__name__)
             param_space = FAIRNESS_PARAM_SPACES[model_class.__name__]
             param_space["sensitive_cols"] = {
-                "choices": [PROTECTED_ATTRIBUTES[args["dataset"]] + "_0"],
+                "choices": ["Z"],
+                "type": "categorical",
+            }
+            param_space["train_sensitive_cols"] = {
+                "choices": [False],
                 "type": "categorical",
             }
             if model_class.__name__ == "EqualOpportunityClassifier":
                 param_space["positive_target"] = {
-                    "choices": [1],
+                    "choices": [0],
                     "type": "categorical",
                 }
             study, model = training.optimize_model_fast(
@@ -380,6 +380,10 @@ def experiment_fairness(args):
 
             print(f"Finished training with ROC {study.best_value:.2f}")
 
+        X_train = X_train.drop(columns=["Z"])
+        X_val = X_val.drop(columns=["Z"])
+        X_test = X_test.drop(columns=["Z"])
+        
         if "FairGBMClassifier" in FAIRNESS_CLASS_LIST:
             model_class = FairGBMClassifier
             print("Model: ", model_class.__name__)
@@ -427,15 +431,18 @@ def experiment_fairness(args):
         else:
             model_class_ = []
 
+        X_train_preprocessed = pipeline_preprocess.transform(X_train)
+        X_test_preprocessed = pipeline_preprocess.transform(X_test)
         for model_class in model_class_:
             path_ = path
-            path_ = path_.replace("fair_models", "credit_models")
+            path_ = path_.replace("fair_models", "credit_models_unaware")
             model = joblib.load(f"{path_}/{fold}/{model_class.__name__}.pkl")
+
             print("Model: ", model_class.__name__)
             model = model.steps[-1][1]
             thr_opt = ThresholdOptimizer(
                 estimator=model,
-                constraints="true_positive_rate_parity",
+                constraints="true_negative_rate_parity",
                 objective="balanced_accuracy_score",
                 prefit=True,
                 predict_method="predict_proba",
@@ -455,7 +462,7 @@ def experiment_fairness(args):
             thr_opt_helper = Thr_helper(thr_opt, A_test)
             model_dict = {"thr_" + model_class.__name__: [thr_opt_helper, None]}
             metrics = evaluate.get_metrics(model_dict, X_test_preprocessed, Y_test)
-            Y_test_pred = thr_opt.predict(X_test_preprocessed)
+            Y_test_pred = thr_opt_helper.predict(X_test_preprocessed)
             model_dict = {"thr_" + model_class.__name__: Y_test_pred}
             fairness_metrics = evaluate.get_fairness_metrics(
                 model_dict, X_test_preprocessed, Y_test, A_test, benefit_class=0
