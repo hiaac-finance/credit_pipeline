@@ -59,7 +59,8 @@ parser.add_argument('-ar', '--ar_range', type=int, nargs=2, default=[0, 100], he
 parser.add_argument('-wt', '--weights', type=int, nargs=2, default=[1, 1], help='weights of metrics for Topsis', metavar=('Weight_AUC, Weight_Kickout'))
 parser.add_argument('--seed', type=int, help='Seed number')
 parser.add_argument('-y', '--year', type=int, default=2009, help='Year')
-parser.add_argument('-p', '--percent_bad', type=float, default=0.06, help='Percentage bad added')
+parser.add_argument('-p', '--percent_bad', type=float, default=0.07, help='Percentage bad added')
+parser.add_argument('-ths', '--threshold', type=float, default=0.5, help='thrsehold for accept-reject policy')
 parser.add_argument('-s', '--size', type=int, default=1000, help='Percentage bad added')
 parser.add_argument('-c', '--contamination', type=float, default=0.12, help='Percentage bad added')
 parser.add_argument('-ut', '--use_test', action='store_true', help='Use test set to evaluate')
@@ -85,6 +86,9 @@ if args.percent_bad:
 if args.size:
     size = args.size
 
+if args.year:
+    year = args.year
+
 if args.contamination:
     contamination_threshold = args.contamination
 
@@ -101,6 +105,14 @@ weights = [Weight_AUC, Weight_Kickout]
 criterias = np.array([True, True])
 
 
+n_iter = 50
+# size = 250
+# # p_value = 0.06
+# contamination_threshold = 0.12
+year = 2000
+# tr_policy = 0.05 + (year - 2000)/10
+tr_policy = args.threshold
+
 #Set seed
 if args.seed:
     seed_number = args.seed
@@ -110,19 +122,19 @@ else:
         seed_number = secrets.randbelow(1_000_000)
 print(seed_number)
 main_seed = seed_number
-year = 0
 
 metadata = {'seed': str(main_seed),
     'year': str(year),
     'p': str(p_value),
     'size': str(size),
     'contamination': str(contamination_threshold),
+    'tr_policy': str(tr_policy),
   }
 
 
 today = time.strftime("%Y-%m-%d")
 
-logpath = Path(os.path.join(ri_datasets_path,f'HC_py/logs_{today}/log-{seed_number}-{year}-{size}-{p_value}-{contamination_threshold}.log'))
+logpath = Path(os.path.join(ri_datasets_path,f'HC_py/logs_{today}/log-{tr_policy}-{seed_number}-{size}-{p_value}-{contamination_threshold}.log'))
 logpath.parent.mkdir(parents=True, exist_ok=True)
 
 print(logpath)
@@ -151,7 +163,7 @@ detailed_logger.addHandler(file_handler)
 
 detailed_logger.debug(logpath)
 
-detailed_logger.debug(metadata)
+# detailed_logger.debug(metadata)
 
 detailed_logger.debug(args)
 
@@ -161,16 +173,16 @@ detailed_logger.debug(args)
 
 df_o = pd.read_csv(path+'application_train.csv')    #HomeCredit training dataset
 
-#@title Set seed
-new_seed = True #@param {type:"boolean"}
+# #@title Set seed
+# new_seed = False #@param {type:"boolean"}
 
-if new_seed:
-    seed_number = secrets.randbelow(1_000_000) #to name the results files
+# if new_seed:
+#     seed_number = secrets.randbelow(1_000_000) #to name the results files
 
-    while seed_number <100000:
-        seed_number = secrets.randbelow(1_000_000)
-else:
-    seed_number = 123123
+#     while seed_number <100000:
+#         seed_number = secrets.randbelow(1_000_000)
+# else:
+#     seed_number = 123123
 
 main_seed = seed_number
 
@@ -192,22 +204,19 @@ params_dict['LightGBM_2'] = {'boosting_type': 'gbdt', 'class_weight': None,
               'is_unbalance': True}
 
 
-n_iter = 15
-size = 250
-# p_value = 0.06
-# contamination_threshold = 0.12
-year = 2004
-tr_policy = (year - 2000)/10
+# print(year, tr_policy)
 # low_AR, high_AR = 0, 100
 # weights = [1,1]
 # criterias = [True, True]
 
+detailed_logger.debug(f'tr_policy: {tr_policy}')
+# sys.exit()
 
 df_train, df_val = train_test_split(
             df_train, test_size=0.2, random_state=seed_number)
 
 df_train, policy_model = ri.fit_policy(df_train)
-
+detailed_logger.debug(f'Policy model fitted')
 
 X_train, y_train = df_train, df_train["TARGET"]
 X_val, y_val = df_val, df_val["TARGET"]
@@ -218,10 +227,14 @@ X_train_acp, X_train_rej, y_train_acp, y_train_rej = ri.accept_reject_split(X_tr
 X_test_acp, X_test_rej, y_test_acp, y_test_rej = ri.accept_reject_split(X_test, y_test, policy_clf=policy_model, threshold = tr_policy)
 X_val_acp, X_val_rej, y_val_acp, y_val_rej = ri.accept_reject_split(X_val, y_val, policy_clf=policy_model, threshold = tr_policy)
 
+detailed_logger.debug(f'Accept-Reject split done')
+detailed_logger.debug(f'X_train_acp: {X_train_acp.shape}, X_train_rej: {X_train_rej.shape}')
+
 if use_test:
     X_eval = X_test_acp.copy()
     y_eval = y_test_acp.copy()
     R_eval = X_test_rej.copy()
+    detailed_logger.debug(f'Using test set for evaluation')
 # else:
 #     X_eval = pd.concat([X_val_acp.copy(), X_val_rej.copy()], axis=0)
 #     y_eval = pd.concat([y_val_acp.copy(), y_val_rej.copy()], axis=0)
@@ -238,6 +251,8 @@ else:
     X_eval = X_val_acp.copy()
     y_eval = y_val_acp.copy()
     R_eval = X_val_rej.copy()
+    detailed_logger.debug(f'Using validation set for evaluation')
+
 
 
 # dex.get_shapes(X_train, X_train_acp, X_train_rej, X_test, X_test_acp, X_test_rej, X_val, X_val_acp, X_val_rej)
@@ -245,11 +260,12 @@ else:
 
 models_dict = {}
 
-filepath_models = Path(os.path.join(ri_datasets_path,f'HC/Models/RI/models-{seed_number}.joblib'))
+filepath_models = Path(os.path.join(ri_datasets_path,f'HC/Models/RI/models-{seed_number}-{tr_policy}.joblib'))
 if filepath_models.exists():
     models_dict = joblib.load(filepath_models)
-    print(f'Models loaded with shape: {len(models_dict.keys())}')
+    detailed_logger.debug(f'Models loaded with shape: {len(models_dict.keys())}')
 else:
+    detailed_logger.debug(f'Models fitting started with seed {seed_number}')
     benchmark = tr.create_pipeline(X_train_acp, y_train_acp,
                                 LGBMClassifier(**params_dict['LightGBM_2']))
     benchmark.fit(X_train_acp, y_train_acp)
@@ -273,26 +289,30 @@ else:
     
     filepath_models.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(models_dict, filepath_models)
+    detailed_logger.debug(f'Models fitted')
 
 
+filepath_ex = Path(os.path.join(ri_datasets_path,f'HC/Models/TN-{seed_number}/{tr_policy}-{size}-{p_value}-{contamination_threshold}.joblib'))
+datapath_ex = Path(os.path.join(ri_datasets_path,f'HC/Data/TN-/{seed_number}/{tr_policy}-{size}-{p_value}-{contamination_threshold}.parquet'))
 
-filepath_ex = Path(os.path.join(ri_datasets_path,f'HC/Models/TN-{seed_number}/{size}-{p_value}-{contamination_threshold}.joblib'))
-datapath_ex = Path(os.path.join(ri_datasets_path,f'HC/Data/TN-/{seed_number}/{size}-{p_value}-{contamination_threshold}.parquet'))
+detailed_logger.debug(f'filepath_ex: {filepath_ex}')
+detailed_logger.debug(f'datapath_ex: {datapath_ex}')
+
 if filepath_ex.exists() and reuse_exec:
     models_ex = joblib.load(filepath_ex)
-    print(f'TN loaded with shape: {len(models_ex.keys())}')
+    detailed_logger.debug(f'TN loaded with shape: {len(models_ex.keys())}')
 else:
-    print(f'TN fitting started with seed {seed_number}')
+    detailed_logger.debug(f'TN fitting started with seed {seed_number}')
     TNmodels, TNdata = ri.trusted_non_outliers(X_train_acp, y_train_acp, X_train_rej,
                             X_val_acp, y_val_acp, size=size, iterations=n_iter,p = 0.07, output=-1,return_all=True,
                             save_log=False, seed=seed_number, technique='extrapolation')
-    print(f'TN fitted')
+    detailed_logger.debug(f'TN fitted')
     filepath_ex.parent.mkdir(parents=True, exist_ok=True)
     datapath_ex.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(TNmodels, filepath_ex)
 
     #------------------------------------
-    print(f'starting compactation of TN data')
+    detailed_logger.debug(f'starting compactation of TN data')
     train_list = [pd.DataFrame({**item, 'group': i}) for i, item in enumerate(TNdata['X'])]
     last_df = TNdata['unl'][-1].copy()
     last_df.loc[:, 'group'] = -1
@@ -318,21 +338,25 @@ else:
 
 
 if train_tn:
-    filepath_ex = Path(os.path.join(ri_datasets_path,f'Models/TN-{"HC"}/{seed_number}/{size}-{p_value}-{contamination_threshold}.joblib'))
-    datapath_ex = Path(os.path.join(ri_datasets_path,f'Data/TN-{"HC"}/{seed_number}/{size}-{p_value}-{contamination_threshold}.parquet'))
+    filepath_ex = Path(os.path.join(ri_datasets_path,f'Models/TN-{"HC"}/{tr_policy}-{seed_number}/{size}-{p_value}-{contamination_threshold}-{tr_policy}.joblib'))
+    datapath_ex = Path(os.path.join(ri_datasets_path,f'Data/TN-{"HC"}/{tr_policy}-{seed_number}/{size}-{p_value}-{contamination_threshold}-{tr_policy}.parquet'))
     # filepath_ls = Path(os.path.join(ri_datasets_path,f'TN+-{seed_number}-{year}-{size}-{p_value}-{contamination_threshold}.joblib'))
 
     if filepath_ex.exists() and reuse_exec:
         models_ex = joblib.load(filepath_ex)
-        print(f'TN loaded with shape: {len(models_ex.keys())}')
+        detailed_logger.debug(f'TN loaded with shape: {len(models_ex.keys())}')
 
 if eval_ri:
+    detailed_logger.debug(f'Evaluation started')
     df_RI = ri.get_metrics_RI(models_dict, X_eval, y_eval, X_unl=R_eval, acp_rate=0.5)
     df_AUK = ri.area_under_the_kick(models_dict, X_eval, y_eval, R_eval, low_AR, high_AR).mean()
     df_AUC = df_RI.loc['AUC']
     df_KS = df_RI.loc['KS']
     RI_unb = ri.get_metrics_RI(models_dict, pd.concat([X_val_acp, X_val_rej],axis=0), pd.concat([y_val_acp, y_val_rej],axis=0))
+    
+    detailed_logger.debug(f'RI evaluated')
     if train_tn:
+        detailed_logger.debug(f'Evaluation of TN started')
         # Initialize a dictionary to hold all the basic metrics for EX
         df_TN = ri.get_metrics_RI(models_ex, X_eval, y_eval, X_unl=R_eval, acp_rate=0.5)
         df_auc_ex = df_TN.loc['AUC', :]
@@ -342,14 +366,16 @@ if eval_ri:
         TN_unb = ri.get_metrics_RI(models_ex, pd.concat([X_val_acp, X_val_rej],axis=0), pd.concat([y_val_acp, y_val_rej],axis=0))
 
         if use_test:
-            file_path = Path(os.path.join(ri_datasets_path,f'Data/TEST/TN-{year}-results-250.csv'))
+            detailed_logger.debug(f'Evaluation of TN on test set started')
+            file_path = Path(os.path.join(ri_datasets_path,f'Data/TEST/TN-{year}-{tr_policy}-results.csv'))
             file_path.parent.mkdir(parents=True, exist_ok=True)
         else:
-            file_path = Path(os.path.join(ri_datasets_path,f'Data/VAL/TN-{year}-results-1.csv'))
+            detailed_logger.debug(f'Evaluation of TN on validation set started')
+            file_path = Path(os.path.join(ri_datasets_path,f'Data/VAL/TN-{year}-{tr_policy}-results.csv'))
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
 
-        # Define the new data to be added (example data)
+        # Define the new data to be added
         new_data = {
             "seed": seed_number,
             "model": "TN-EX",
@@ -362,6 +388,8 @@ if eval_ri:
             "AUK": df_kick_ex.loc[:, f'TN_{output_ex}'].mean(),
             "unb_AUC": TN_unb.loc['AUC', f'TN_{output_ex}'],
             "Best": output_ex,
+            "Size_train_acp": X_train_acp.shape[0],
+            "Size_train_rej": X_train_rej.shape[0],
         }
 
         # Convert new data to a DataFrame
@@ -380,10 +408,12 @@ if eval_ri:
                     "AUK": df_AUK.loc[col],
                     "unb_AUC": RI_unb.loc['AUC', col],
                     "Best": -1,
+                    "Size_train_acp": X_train_acp.shape[0],
+                    "Size_train_rej": X_train_rej.shape[0],
                 }
             col_df = pd.DataFrame([new_data]).round(3)
             new_df = pd.concat([new_df, col_df], ignore_index=True)
-
+        detailed_logger.debug(f'Evaluation of TN done')
         # Check if the file exists
         if os.path.exists(file_path):
             # Read the existing CSV file
@@ -396,3 +426,4 @@ if eval_ri:
 
         # Save the updated DataFrame back to the CSV file
         updated_df.to_csv(file_path, index=False)
+        detailed_logger.debug(f'Evaluation of TN saved')

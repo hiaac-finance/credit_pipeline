@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 # Set up logging
-logpath = Path('logs/runner_new_LC.log')
+logpath = Path('logs/runner_new_HC.log')
 logpath.parent.mkdir(parents=True, exist_ok=True)
 
 logging.getLogger().handlers = []
@@ -56,21 +56,22 @@ def main():
     # Define argument values to iterate over
     ar_ranges = [(0, 100)]
     weights = [(1, 1)]
-    years = [2013]
-    seeds = [120054]
+    years = [2000]
+    thresholds = [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65]
+    seeds = [120054, 388388, 570337, 907361, 938870, 555555, 555556, 555557, 555558, 555559]
     percent_bads = [0.07]
     sizes = [1000]
     contaminations = [0.12,]
     # For boolean flags, use a tuple with the argument name and a boolean to indicate if it should be included
     use_test_flags = [('--use_test', True)]
     train_ri_flags = [('--train_ri', True)] 
-    reuse_exec_flags = [('--reuse_exec', True)]
+    reuse_exec_flags = [('--reuse_exec', False)]
     train_tn_flags = [('--train_tn', True)]
     eval_ri_flags = [('--eval_ri', True)]
 
 
     experiments = itertools.product(
-        ar_ranges, weights, seeds, years, sizes, percent_bads, contaminations,
+        ar_ranges, weights, seeds, years, sizes, percent_bads, contaminations,thresholds,
          use_test_flags, train_ri_flags, reuse_exec_flags, train_tn_flags, eval_ri_flags
     )
     qtd_exp = len(list(experiments))
@@ -78,20 +79,21 @@ def main():
 
     log.debug(f'Running {qtd_exp} experiments.')
     # Iterate over all combinations of arguments
-    for ar_range, weight, seed, year, size, percent_bad, contamination, use_test, train_ri, reuse_exec, train_tn, eval_ri in itertools.product(
-        ar_ranges, weights, seeds, years, sizes, percent_bads, contaminations,
+    for ar_range, weight, seed, year, size, percent_bad, contamination, threshold, use_test, train_ri, reuse_exec, train_tn, eval_ri in itertools.product(
+        ar_ranges, weights, seeds, years, sizes, percent_bads, contaminations,thresholds,
          use_test_flags, train_ri_flags, reuse_exec_flags, train_tn_flags, eval_ri_flags
     ):
         seed = seed + (year - 2009)
         cmd = [
-            'python3', 'meta_LC.py',
+            'python3', 'meta_HC.py',
             '--ar_range', str(ar_range[0]), str(ar_range[1]),
             '--weights', str(weight[0]), str(weight[1]),
             '--seed', str(seed),
             '--year', str(year),
             '--percent_bad', str(percent_bad),
             '--size', str(size),
-            '--contamination', str(contamination)
+            '--contamination', str(contamination),
+            '--threshold', str(threshold)
         ]
         
         # Add flags if they are true

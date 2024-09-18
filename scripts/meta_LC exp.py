@@ -210,7 +210,8 @@ if args.eval_ri:
         df_auc_ex = df_TN.loc['AUC', :]
         df_ks_ex = df_TN.loc['KS', :]
         df_kick_ex = ri.area_under_the_kick(models_ex, X_eval, y_eval, R_eval, low_AR, high_AR)
-        output_ex, best_values_ex = ri.evaluate_by_AUC_AUK(models_ex,  X_eval, y_eval, R_eval, weights, criterias, low_AR, high_AR)
+        #Should always be done on val and not test
+        output_ex, best_values_ex = ri.evaluate_by_AUC_AUK(models_ex,  X_val, y_val, R_val, weights, criterias, low_AR, high_AR)
         
         if args.use_test:
             file_path = Path(os.path.join(ri_datasets_path,f'Data/TEST/TN-{year}-results.csv'))

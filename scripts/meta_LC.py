@@ -6,7 +6,8 @@ save_path = "../tests/"
 ri_datasets_path = "../data/riData/"
 backup_image_folder = "../../backup/Images/"
 
- 
+print('até aqui tudo bem')
+
 import argparse
 import sys
 import numpy as np
@@ -152,9 +153,12 @@ detailed_logger.debug(args)
     
 #Accepts
 
-load_path = f'{ri_datasets_path}Load/{main_seed}_{year}'
+if year < 2013:
+    load_path = f'{ri_datasets_path}Load/{main_seed}_{year}'
+else:
+    load_path = f'{ri_datasets_path}Load/{main_seed}_{year}_{seed_number%5}'
 
-if Path(f'{load_path}').exists() and False:
+if Path(f'{load_path}').exists():
     df_train = pd.read_csv(f'{load_path}/A_train.csv', index_col=0)
     df_val = pd.read_csv(f'{load_path}/A_val.csv', index_col=0)
     df_test = pd.read_csv(f'{load_path}/A_test.csv', index_col=0)
@@ -217,8 +221,7 @@ else:
     # Now filtered_df contains only the rows that match the specified criteria
     detailed_logger.debug(f'Rejects read with shape: {df_r.shape}')
     # Log the rejected columns
-    detailed_logger.debug(f'Rejected columns: {df_r.columns.tolist()}')
-        
+    detailed_logger.debug(f'Rejected columns: {df_r.columns.tolist()}')    
     #rejected fix names
     df_r["emp_length"] = df_r["Employment Length"]
     df_r["addr_state"] = df_r["State"]
@@ -308,8 +311,47 @@ else:
             detailed_logger.debug(e)
 
     detailed_logger.debug(f'Train-Test split done')
+    detailed_logger.debug(f'Train A shape: {train_a.shape}')
+    detailed_logger.debug(f'Train R shape: {train_r.shape}')
+    detailed_logger.debug(f'Test A shape: {test_a.shape}')
+    detailed_logger.debug(f'Test R shape: {test_r.shape}')
 
-        
+    if year >= 2013:
+        # Para 'train_a'
+        kf_a = KFold(n_splits=5, shuffle=True, random_state=42)
+        for i, (_, train_index_a) in enumerate(kf_a.split(train_a)):
+            if i == seed_number % 5:
+                train_a = train_a.iloc[train_index_a]
+                break
+
+        # Para 'train_r'
+        kf_r = KFold(n_splits=5, shuffle=True, random_state=42)
+        for i, (_, train_index_r) in enumerate(kf_r.split(train_r)):
+            if i == seed_number % 5:
+                train_r = train_r.iloc[train_index_r]
+                break
+
+        # Para 'test_a'
+        kf_test_a = KFold(n_splits=5, shuffle=True, random_state=42)
+        for i, (_, test_index_a) in enumerate(kf_test_a.split(test_a)):
+            if i == seed_number % 5:
+                test_a = test_a.iloc[test_index_a]
+                break
+
+        # Para 'test_r'
+        kf_test_r = KFold(n_splits=5, shuffle=True, random_state=42)
+        for i, (_, test_index_r) in enumerate(kf_test_r.split(test_r)):
+            if i == seed_number % 5:
+                test_r = test_r.iloc[test_index_r]
+                break
+
+        detailed_logger.debug(f'Train A shape: {train_a.shape}')
+        detailed_logger.debug(f'Train R shape: {train_r.shape}')
+        detailed_logger.debug(f'Test A shape: {test_a.shape}')
+        detailed_logger.debug(f'Test R shape: {test_r.shape}')
+
+    # Split features and target
+
     X_train = train_a.loc[:, train_a.columns != "target"]
     y = train_a["target"]
     X_test = test_a.loc[:, test_a.columns != "target"]
@@ -408,7 +450,8 @@ if args.train_ri:
 if args.train_tn:
     filepath_ex = Path(os.path.join(ri_datasets_path,f'Models/TN-{year}/{seed_number}/{size}-{p_value}-{contamination_threshold}.joblib'))
     datapath_ex = Path(os.path.join(ri_datasets_path,f'Data/TN-{year}/{seed_number}/{size}-{p_value}-{contamination_threshold}.parquet'))
-    # filepath_ls = Path(os.path.join(ri_datasets_path,f'TN+-{seed_number}-{year}-{size}-{p_value}-{contamination_threshold}.joblib'))
+    # filepath_ls = Path(os.path.join(ri_datasets_path,f'Models/TN+-{year}/{seed_number}/{size}-{p_value}-{contamination_threshold}.joblib'))
+    # datapath_ls = Path(os.path.join(ri_datasets_path,f'Data/TN+-{year}/{seed_number}/{size}-{p_value}-{contamination_threshold}.parquet'))
 
     if filepath_ex.exists() and args.reuse_exec:
         models_ex = joblib.load(filepath_ex)
@@ -486,6 +529,7 @@ if args.eval_ri:
 
         # Evaluate the ex iterations
         output_ex, best_values_ex = ri.evaluate_by_AUC_AUK(models_ex, X_val, y_val, R_val, weights, criterias, low_AR, high_AR)
+        
         detailed_logger.debug(f'models_ex evaluated')
         # print('EX', df_auc_ex[f'TN_{output_ex+1}'], df_kick_ex[f'TN_{output_ex+1}'].mean())
 
