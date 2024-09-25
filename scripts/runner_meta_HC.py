@@ -8,14 +8,14 @@ import time
 from pathlib import Path
 
 # Set up logging
-logpath = Path('logs/runner_new_HC.log')
+logpath = Path('logs/new_runner_new_HC.log')
 logpath.parent.mkdir(parents=True, exist_ok=True)
 
 logging.getLogger().handlers = []
 
 # Create and configure a custom logger for detailed (DEBUG level) logging
 log = logging.getLogger('detailed')
-log.setLevel(logging.DEBUG)  # Set this logger to capture everything
+log.setLevel(logging.INFO)  # Set this logger to capture everything
 
 # Create a file handler for the custom logger (optional if you want all logs in the same file)
 file_handler = logging.FileHandler(logpath)
@@ -56,7 +56,7 @@ def main():
     # Define argument values to iterate over
     ar_ranges = [(0, 100)]
     weights = [(1, 1)]
-    years = [2000]
+    years = [2000, 3000]
     thresholds = [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65]
     seeds = [120054, 388388, 570337, 907361, 938870, 555555, 555556, 555557, 555558, 555559]
     percent_bads = [0.07]
@@ -65,7 +65,7 @@ def main():
     # For boolean flags, use a tuple with the argument name and a boolean to indicate if it should be included
     use_test_flags = [('--use_test', True)]
     train_ri_flags = [('--train_ri', True)] 
-    reuse_exec_flags = [('--reuse_exec', False)]
+    reuse_exec_flags = [('--reuse_exec', True)]
     train_tn_flags = [('--train_tn', True)]
     eval_ri_flags = [('--eval_ri', True)]
 
@@ -115,6 +115,7 @@ def main():
         run_command(cmd)
 # %%
 if __name__ == '__main__':
+
     log.debug('Starting runner in date: {0}'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
     main()
 

@@ -70,7 +70,7 @@ parser.add_argument('-tn', '--train_tn', action='store_true', default=True, help
 parser.add_argument('-ev', '--eval_ri', action='store_true', default=True, help='Evaluate models')
 args = parser.parse_args()
 
-
+# sys.exit()
 train_tn = args.train_tn
 reuse_exec = args.reuse_exec
 eval_ri = args.eval_ri
