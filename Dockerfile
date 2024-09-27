@@ -59,8 +59,8 @@ RUN pip install jupyter \
     notebook
 
 # Install credit_pipeline inside the container
-# If is already cloned
-# RUN pip install -e /work/$OUTSIDE_USER/credit_pipeline (need to test this)
+# cd /work/$USER/credit_pipeline
+# pip install -e .
 
 # docker build -t credit:$USER -f Dockerfile --build-arg OUTSIDE_GROUP=`/usr/bin/id -ng $USER` --build-arg OUTSIDE_GID=`/usr/bin/id -g $USER` --build-arg OUTSIDE_USER=$USER --build-arg OUTSIDE_UID=$UID .
 

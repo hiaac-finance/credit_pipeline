@@ -5,6 +5,7 @@ A general pipeline for Trustworthy Machine Learning on credit datasets,
 including functionalities for fairness, reject inference, and
 explainability. The package facilitates the development of more ethical
 algorithms at every step of the ML pipeline for credit modelling.
+Supplementary material for the paper "Best Practices for Responsible Machine Learning in Credit Scoring".
 
 Install
 -------
@@ -26,14 +27,26 @@ To preprocess the data use the following command at the root folder of the repos
 
 ``python -m credit_pipeline.data``
 
+Another option is to use install the package within a Docker container. 
+The file `Dockerfile` contains the specification of the container and the commands to build and run it.
+ (Note: it is recommended to have prior knowledge of Docker to use this feature.)
+
 Usage
 -----
 
-The package is distributed with a Dockerfile that can be used to run the code in a container, using the same environment as the one used for development. The Dockerfile is located at the root of the repository, including commands to build and run the container. (Note: it is recommended to have prior knowledge of Docker to use this feature.)
+Examples of using the diverse functionalities package are located in Jupyter Notebooks at ``examples/usage.ipynb``.
 
-One can also use the packaged in a conda environment with installed dependencies. 
 
-Examples of using the diverse functionalities package are located in Jupyter Notebooks at ``examples/usage.ipynb`` (WIP).
+Experiments
+-----
+
+Experiments code is present at ``scripts/experiments.py``. To run, use the following command at the path ``scripts/``:
+
+``python experiments.py --experiment credit_models --dataset german --seed 0 --n_trials 100 --n_jobs 1``
+
+You can select the experiment between ["credit_models", "fairness"] and dataset between ["german", "taiwan", "homecredit"]. Code to generate the tables is present in ``examples/analysis_results.ipynb``.
+
+Experiments of reject inference are present in ``examples/reject_inference.ipynb`` and for explainability in ``examples/explainability.ipynb``.
 
 Contact
 -------

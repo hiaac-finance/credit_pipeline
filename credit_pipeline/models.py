@@ -118,11 +118,12 @@ class MLPClassifier(BaseEstimator, ClassifierMixin):
         )
 
     def predict_proba(self, X):
-        prob = self.model.predict(X, verbose=0)
+        # prob = self.model.predict(X, verbose=0)
+        prob = self.model(X.values, training=False)
         return np.concatenate([1 - prob, prob], axis=1)
 
     def predict(self, X):
-        return self.model.predict(X, verbose=0) > 0.5
+        return self.model(X.values, training=False) > 0.5
 
     def score(self, X, y):
         return self.model.evaluate(X, y, verbose=0)[1]
