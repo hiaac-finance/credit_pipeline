@@ -6,7 +6,7 @@ save_path = "../tests/"
 ri_datasets_path = "../data/riData/"
 backup_image_folder = "../../backup/Images/"
 
-print('até aqui tudo bem')
+# print('até aqui tudo bem')
 
 import argparse
 import sys
@@ -52,6 +52,28 @@ import credit_pipeline.reject_inference as ri
 import credit_pipeline.evaluate as ev
 
 from submodules.topsis_python import topsis as top
+
+def setup_custom_logger(logpath):
+    log = logging.getLogger('detailed')
+    
+    # Limpar manipuladores antigos para evitar logs duplicados
+    if log.hasHandlers():
+        log.handlers.clear()
+    
+    log.setLevel(logging.INFO)  # Definir o nível do logger
+    
+    # Criar um manipulador de arquivo
+    file_handler = logging.FileHandler(logpath)
+    file_handler.setLevel(logging.INFO)
+    
+    # Definir o formato do logger
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    file_handler.setFormatter(formatter)
+    
+    # Adicionar o manipulador ao logger
+    log.addHandler(file_handler)
+    
+    return log
 
 
 #ARGs and constants
@@ -116,47 +138,53 @@ metadata = {'seed': str(main_seed),
 
 today = time.strftime("%Y-%m-%d")
 
-logpath = Path(os.path.join(ri_datasets_path,f'LC_py/logs_{today}/log-{seed_number}-{year}-{size}-{p_value}-{contamination_threshold}.log'))
+# logpath = Path(os.path.join(ri_datasets_path,f'LC_py/logs_{today}/log-{seed_number}-{year}-{size}-{p_value}-{contamination_threshold}.log'))
+logpath = Path(os.path.join(ri_datasets_path,f'LC_py/logs_{today}/{year}.log'))
 logpath.parent.mkdir(parents=True, exist_ok=True)
 
 print(logpath)
 
-logging.getLogger().handlers = []
-logging.basicConfig(filename=logpath, 
-                    filemode='w',  
-                    level=logging.WARNING,  # This sets the threshold for the root logger
-                    format='%(asctime)s - %(levelname)s - %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S')
-
-# Create and configure a custom logger for detailed (DEBUG level) logging
+setup_custom_logger(logpath) 
 detailed_logger = logging.getLogger('detailed')
-detailed_logger.setLevel(logging.DEBUG)  # Set this logger to capture everything
+detailed_logger.info(" " * 50)
+detailed_logger.info("-" * 50)
+detailed_logger.info('Starting runner in date: {0}'.format(time.strftime('%Y-%m-%d %H:%M:%S')))
 
-# Create a file handler for the custom logger (optional if you want all logs in the same file)
-file_handler = logging.FileHandler(logpath)
-file_handler.setLevel(logging.DEBUG)
+# logging.getLogger().handlers = []
+# logging.basicConfig(filename=logpath, 
+#                     filemode='w',  
+#                     level=logging.WARNING,  # This sets the threshold for the root logger
+#                     format='%(asctime)s - %(levelname)s - %(message)s',
+#                     datefmt='%Y-%m-%d %H:%M:%S')
 
-# You might want to use the same formatter for consistency
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-file_handler.setFormatter(formatter)
+# # Create and configure a custom logger for detailed (DEBUG level) logging
+# detailed_logger = logging.getLogger('detailed')
+# detailed_logger.setLevel(logging.DEBUG)  # Set this logger to capture everything
 
-# Add the file handler to the detailed logger
-detailed_logger.addHandler(file_handler)
+# # Create a file handler for the custom logger (optional if you want all logs in the same file)
+# file_handler = logging.FileHandler(logpath)
+# file_handler.setLevel(logging.DEBUG)
 
-detailed_logger.debug(logpath)
+# # You might want to use the same formatter for consistency
+# formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+# file_handler.setFormatter(formatter)
 
-detailed_logger.debug(metadata)
+# # Add the file handler to the detailed logger
+# detailed_logger.addHandler(file_handler)
 
-detailed_logger.debug(args)
+# detailed_logger.debug(logpath)
+
+# detailed_logger.debug(metadata)
+
+# detailed_logger.debug(args)
 
 #Read Dataset
     
 #Accepts
 
-if year < 2013:
-    load_path = f'{ri_datasets_path}Load/{main_seed}_{year}'
-else:
-    load_path = f'{ri_datasets_path}Load/{main_seed}_{year}_{seed_number%5}'
+
+load_path = f'{ri_datasets_path}Load/{main_seed}_{year}'
+
 
 if Path(f'{load_path}').exists():
     df_train = pd.read_csv(f'{load_path}/A_train.csv', index_col=0)
@@ -172,10 +200,10 @@ if Path(f'{load_path}').exists():
     X_test = df_test.loc[:, df_test.columns != "target"]
     y_test = df_test["target"]
 
-    detailed_logger.debug(f'Data loaded from {load_path}')
+    detailed_logger.info(f'Data loaded from {load_path}')
 
 else:
-    detailed_logger.debug(f'Data not found in {load_path}')
+    detailed_logger.info(f'Data not found in {load_path}')
     la = ["issue_d", "loan_amnt", "funded_amnt", "funded_amnt_inv", "term", "int_rate"]
     lb = ["installment", "emp_length", "annual_inc", "verification_status", "loan_status", 
         "purpose", "addr_state", "dti", "delinq_2yrs"]
@@ -192,15 +220,15 @@ else:
     for chunk in pd.read_csv(path+'accepted_2007_to_2018Q4.csv', chunksize=chunksize, usecols=selected_columns_a):
         # Filter the current chunk based on the criteria
         filtered_chunk = chunk[chunk['issue_d'].str.contains(str(year), na=False)]
-        detailed_logger.debug(f'Filtered chunk with shape: {filtered_chunk.shape}')
+        detailed_logger.info(f'Filtered chunk with shape: {filtered_chunk.shape}')
         # Append the filtered chunk to the list
         filtered_chunks.append(filtered_chunk)
     # Concatenate all filtered chunks into a single DataFrame
     df_a = pd.concat(filtered_chunks)
 
-    detailed_logger.debug(f'Accepts read with shape: {df_a.shape}')
+    detailed_logger.info(f'Accepts read with shape: {df_a.shape}')
     # Now filtered_df contains only the rows that match the specified criteria
-    detailed_logger.debug(f'Selected columns: {selected_columns_a}')
+    detailed_logger.info(f'Selected columns: {selected_columns_a}')
         
     #Rejects
     selected_columns_r = ["Application Date", "Debt-To-Income Ratio","State", "Risk_Score", "Amount Requested", "Employment Length"]
@@ -219,9 +247,9 @@ else:
     # Concatenate all filtered chunks into a single DataFrame
     df_r = pd.concat(filtered_chunks)
     # Now filtered_df contains only the rows that match the specified criteria
-    detailed_logger.debug(f'Rejects read with shape: {df_r.shape}')
+    detailed_logger.info(f'Rejects read with shape: {df_r.shape}')
     # Log the rejected columns
-    detailed_logger.debug(f'Rejected columns: {df_r.columns.tolist()}')    
+    detailed_logger.info(f'Rejected columns: {df_r.columns.tolist()}')    
     #rejected fix names
     df_r["emp_length"] = df_r["Employment Length"]
     df_r["addr_state"] = df_r["State"]
@@ -245,12 +273,12 @@ else:
         try:
             df_r = df_r.drop(c, axis = 1)
         except Exception as e:
-            detailed_logger.debug(e)
+            detailed_logger.info(e)
     for c in ['last_fico_range_high', 'last_fico_range_low', 'loan_status']:
         try:
             df_a = df_a.drop(c, axis = 1)
         except Exception as e:
-            detailed_logger.debug(e)
+            detailed_logger.info(e)
 
 
     # columns based on Shih et al. (2022)
@@ -264,7 +292,7 @@ else:
     # Now union_list contains all elements from r_cols first, followed by those unique to pearson_a
     df_a = df_a.loc[:, union_list]
             
-    detailed_logger.debug("Now union_list contains all elements from r_cols first, followed by those unique to pearson_a")
+    detailed_logger.info("Now union_list contains all elements from r_cols first, followed by those unique to pearson_a")
 
         
     #Fix dtype of variable emp_length (Object -> number)
@@ -275,11 +303,11 @@ else:
         df_r['emp_length'] = df_r['emp_length'].map(lambda x: "0" if x == '< 1 year' else x)
         df_r['emp_length'] = df_r['emp_length'].map(lambda x : int(re.search(r'\d+', x).group()), na_action='ignore')
     except Exception as e:
-        detailed_logger.debug(e)
+        detailed_logger.info(e)
     try:
         df_a['term'] = df_a['term'].map(lambda x : int(re.search(r'\d+', x).group()))
     except Exception as e:
-        detailed_logger.debug(e)
+        detailed_logger.info(e)
 
         
     #add missing columns to df_r
@@ -289,7 +317,7 @@ else:
     for col in input_columns:
         df_r.insert(df_r.columns.shape[0], col, np.nan)
 
-    detailed_logger.debug('Data preprocessing complete!')
+    detailed_logger.info('Data preprocessing complete!')
 
 
     # Split the data into training and testing sets
@@ -300,7 +328,7 @@ else:
         test_rej = df_r[df_r['issue_d'].str.contains(f"{year}-10|{year}-11|{year}-12", na=False)]
         test_acp = df_a[df_a['issue_d'].str.contains(f"Oct-{year}|Nov-{year}|Dec-{year}", na=False)]
     except Exception as e:
-        detailed_logger.debug(e)
+        detailed_logger.info(e)
 
     train_r, train_a, test_r, test_a = train_rej.copy(), train_acp.copy(), test_rej.copy(), test_acp.copy()
 
@@ -308,47 +336,29 @@ else:
         try:
             df.drop('issue_d', axis = 1, inplace=True)
         except Exception as e:
-            detailed_logger.debug(e)
+            detailed_logger.info(e)
 
-    detailed_logger.debug(f'Train-Test split done')
-    detailed_logger.debug(f'Train A shape: {train_a.shape}')
-    detailed_logger.debug(f'Train R shape: {train_r.shape}')
-    detailed_logger.debug(f'Test A shape: {test_a.shape}')
-    detailed_logger.debug(f'Test R shape: {test_r.shape}')
+    detailed_logger.info(f'Train-Test split done')
+    detailed_logger.info(f'Train A shape: {train_a.shape}')
+    detailed_logger.info(f'Train R shape: {train_r.shape}')
+    detailed_logger.info(f'Test A shape: {test_a.shape}')
+    detailed_logger.info(f'Test R shape: {test_r.shape}')
 
     if year >= 2013:
+        fraction = 0.2/(2**(year - 2013))
         # Para 'train_a'
-        kf_a = KFold(n_splits=5, shuffle=True, random_state=42)
-        for i, (_, train_index_a) in enumerate(kf_a.split(train_a)):
-            if i == seed_number % 5:
-                train_a = train_a.iloc[train_index_a]
-                break
-
+        train_a = train_a.sample(frac=0.2, random_state=main_seed)
         # Para 'train_r'
-        kf_r = KFold(n_splits=5, shuffle=True, random_state=42)
-        for i, (_, train_index_r) in enumerate(kf_r.split(train_r)):
-            if i == seed_number % 5:
-                train_r = train_r.iloc[train_index_r]
-                break
-
+        train_r = train_r.sample(frac=0.2, random_state=main_seed)
         # Para 'test_a'
-        kf_test_a = KFold(n_splits=5, shuffle=True, random_state=42)
-        for i, (_, test_index_a) in enumerate(kf_test_a.split(test_a)):
-            if i == seed_number % 5:
-                test_a = test_a.iloc[test_index_a]
-                break
-
+        test_a = test_a.sample(frac=0.2, random_state=main_seed)
         # Para 'test_r'
-        kf_test_r = KFold(n_splits=5, shuffle=True, random_state=42)
-        for i, (_, test_index_r) in enumerate(kf_test_r.split(test_r)):
-            if i == seed_number % 5:
-                test_r = test_r.iloc[test_index_r]
-                break
-
-        detailed_logger.debug(f'Train A shape: {train_a.shape}')
-        detailed_logger.debug(f'Train R shape: {train_r.shape}')
-        detailed_logger.debug(f'Test A shape: {test_a.shape}')
-        detailed_logger.debug(f'Test R shape: {test_r.shape}')
+        test_r = test_r.sample(frac=0.2, random_state=main_seed)
+        
+        detailed_logger.info(f'Train A shape: {train_a.shape}')
+        detailed_logger.info(f'Train R shape: {train_r.shape}')
+        detailed_logger.info(f'Test A shape: {test_a.shape}')
+        detailed_logger.info(f'Test R shape: {test_r.shape}')
 
     # Split features and target
 
@@ -364,13 +374,13 @@ else:
     X_test = knn_inputer[:-3].transform(X_test)
     R_train_knn = knn_inputer[:-3].transform(train_r)
     R_test = knn_inputer[:-3].transform(test_r)
-    detailed_logger.debug(f'KNN input done')
+    detailed_logger.info(f'KNN input done')
 
     X_train, X_val, y_train, y_val = train_test_split(
         X_train_knn, y, test_size=0.3, random_state=main_seed, shuffle=True)
     R_train, R_val = train_test_split(
         R_train_knn, test_size=0.3, random_state=main_seed, shuffle=True)
-    detailed_logger.debug(f'Train-Val split done')
+    detailed_logger.info(f'Train-Val split done')
 
     #save data to load_path
     os.makedirs(f'{load_path}', exist_ok=True)
@@ -381,7 +391,7 @@ else:
     R_val.to_csv(f'{load_path}/R_val.csv', index=True)
     R_test.to_csv(f'{load_path}/R_test.csv', index=True)
 
-    detailed_logger.debug(f'Data saved to {load_path}')
+    detailed_logger.info(f'Data saved to {load_path}')
 
 if args.use_test:
     X_eval = X_test.copy()
@@ -423,26 +433,26 @@ if args.train_ri:
     filepath_models = Path(os.path.join(ri_datasets_path,f'Models/RI/models-{year}/{seed_number}.joblib'))
     if filepath_models.exists() and args.reuse_exec:
         models_dict = joblib.load(filepath_models)
-        detailed_logger.debug(f'Models loaded with shape: {len(models_dict.keys())}')
+        detailed_logger.info(f'Models loaded with shape: {len(models_dict.keys())}')
     else:
         models_dict.update(
             ri.augmentation_with_soft_cutoff(X_train, y_train, R_train, seed = seed_number))
-        detailed_logger.debug(f'augmentation_with_soft_cutoff fitted')
+        detailed_logger.info(f'augmentation_with_soft_cutoff fitted')
         models_dict.update(
             ri.augmentation(X_train, y_train, R_train, mode='up', seed = seed_number))
-        detailed_logger.debug(f'augmentation upward fitted')
+        detailed_logger.info(f'augmentation upward fitted')
         models_dict.update(
             ri.fuzzy_augmentation(X_train, y_train, R_train, seed = seed_number))
-        detailed_logger.debug(f'fuzzy_augmentation fitted')
+        detailed_logger.info(f'fuzzy_augmentation fitted')
         models_dict.update(
             ri.extrapolation(X_train, y_train, R_train, seed = seed_number))
-        detailed_logger.debug(f'extrapolation fitted')
+        detailed_logger.info(f'extrapolation fitted')
         models_dict.update(
             ri.parcelling(X_train, y_train, R_train, seed = seed_number))
-        detailed_logger.debug(f'parcelling fitted')
+        detailed_logger.info(f'parcelling fitted')
         models_dict.update(
             ri.label_spreading(X_train, y_train, R_train, seed = seed_number))
-        detailed_logger.debug(f'label_spreading fitted')
+        detailed_logger.info(f'label_spreading fitted')
 
         filepath_models.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(models_dict, filepath_models)
@@ -455,19 +465,19 @@ if args.train_tn:
 
     if filepath_ex.exists() and args.reuse_exec:
         models_ex = joblib.load(filepath_ex)
-        detailed_logger.debug(f'TN loaded with shape: {len(models_ex.keys())}')
+        detailed_logger.info(f'TN loaded with shape: {len(models_ex.keys())}')
     else:
         TNmodels, TNdata = ri.trusted_non_outliers(X_train=X_train, y_train=y_train, X_unl=R_train,
                                         iterations=50, p=p_value, 
                                         contamination_threshold=contamination_threshold, return_all=True,
                                         save_log=False, technique='extrapolation', seed=seed_number, output=-1)
-        detailed_logger.debug(f'TN fitted')
+        detailed_logger.info(f'TN fitted')
         filepath_ex.parent.mkdir(parents=True, exist_ok=True)
         datapath_ex.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(TNmodels, filepath_ex)
 
         #------------------------------------
-        detailed_logger.debug(f'starting compactation of TN data')
+        detailed_logger.info(f'starting compactation of TN data')
         train_list = [pd.DataFrame({**item, 'group': i}) for i, item in enumerate(TNdata['X'])]
         last_df = TNdata['unl'][-1].copy()
         last_df.loc[:, 'group'] = -1
@@ -487,7 +497,7 @@ if args.train_tn:
         result_df = result_df.astype(int)
 
         result_df.to_parquet(datapath_ex)
-        detailed_logger.debug(f'data saved to {datapath_ex}')
+        detailed_logger.info(f'data saved to {datapath_ex}')
         #------------------------------------
         models_ex = TNmodels
         
@@ -495,12 +505,12 @@ if args.train_tn:
 
     # if filepath_ls.exists() and args.reuse_exec:
     #     models_ls = joblib.load(filepath_ls)
-    #     detailed_logger.debug(f'TN+ loaded with shape: {len(models_ls.keys())}')
+    #     detailed_logger.info(f'TN+ loaded with shape: {len(models_ls.keys())}')
     # else:
     #     ri.trusted_non_outliers(X_train=X_train, y_train=y_train, X_unl=R_train,
     #                                     X_val=X_val, y_val=y_val, iterations=50, p=p_value, acp_rate=0.5,
     #                                     technique='LS', seed=seed_number, output=-1)
-    #     detailed_logger.debug(f'TN+ fitted')
+    #     detailed_logger.info(f'TN+ fitted')
     #     models_ls = joblib.load(filepath_ls)
 
 if args.eval_ri:
@@ -513,7 +523,7 @@ if args.eval_ri:
         filepath = Path(os.path.join(ri_datasets_path, f'metrics_bm_/val/Exp-{main_seed}-{year}.csv'))
     filepath.parent.mkdir(parents=True, exist_ok=True)
     df_metrics.round(4).to_csv(filepath, index=True)
-    detailed_logger.debug(f'Metrics saved to {filepath}')
+    detailed_logger.info(f'Metrics saved to {filepath}')
 
     if args.train_tn:
         # Initialize a dictionary to hold all the basic metrics for EX
@@ -530,12 +540,12 @@ if args.eval_ri:
         # Evaluate the ex iterations
         output_ex, best_values_ex = ri.evaluate_by_AUC_AUK(models_ex, X_val, y_val, R_val, weights, criterias, low_AR, high_AR)
         
-        detailed_logger.debug(f'models_ex evaluated')
+        detailed_logger.info(f'models_ex evaluated')
         # print('EX', df_auc_ex[f'TN_{output_ex+1}'], df_kick_ex[f'TN_{output_ex+1}'].mean())
 
         # # Evaluate the ls iterations
         # output_ls, best_values_ls = ri.evaluate_by_AUC_AUK(models_ls, X_val, y_val, R_val, weights, criterias, low_AR, high_AR)
-        # detailed_logger.debug(f'models_ls evaluated')
+        # detailed_logger.info(f'models_ls evaluated')
         # print('LS', best_values_ls, df_auc_ls[f'TN_{output_ls+1}'], df_kick_ls[f'TN_{output_ls+1}'].mean())
 
 
@@ -572,7 +582,7 @@ if args.eval_ri:
             filename = Path(os.path.join(backup_image_folder, f'TN_AUC_AUK/val-{main_seed}-{year}-{p_value}.png'))
             filename.parent.mkdir(parents=True, exist_ok=True)
             plt.savefig(filename, metadata=metadata)
-        detailed_logger.debug(f'Image saved to {filename}')
+        detailed_logger.info(f'Image saved to {filename}')
 
 
         # It could be interesting to also compare the number of includes rejected samples as a metric
@@ -584,7 +594,7 @@ if args.eval_ri:
         # models_dict.update({f'TN+': models_ls[f'TN_{output_ls}']})
 
     else:
-        detailed_logger.debug(f'No TN fitted')
+        detailed_logger.info(f'No TN fitted')
 
     # Evaluate the RI models
     auk = ri.area_under_the_kick(models_dict, X_eval, y_eval, R_eval, low_AR, high_AR).mean().round(4)
@@ -594,7 +604,7 @@ if args.eval_ri:
     auc = metrics.loc['AUC', :].round(4)
     kick = metrics.loc['Kickout', :].round(4)
 
-    detailed_logger.debug(f'AUC and AUK calculated')
+    detailed_logger.info(f'AUC and AUK calculated')
 
     fig, ax = plt.subplots(figsize=(10, 4))  # Create a figure and an axes.
 
@@ -616,8 +626,8 @@ if args.eval_ri:
         filename = Path(os.path.join(backup_image_folder, f'ALL_AUC_AUK/val-{main_seed}-{year}-{p_value}.png'))
         filename.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(filename, metadata=metadata)
-        detailed_logger.debug(f'Image saved to {filename}')
-    print(filename)
+        detailed_logger.info(f'Image saved to {filename}')
+    # print(filename)
 
 
     # metrics['metadata'] = str(metadata)
@@ -628,7 +638,7 @@ if args.eval_ri:
     filepath.parent.mkdir(parents=True, exist_ok=True)
     metrics.to_csv(filepath, index=True)
 
-    detailed_logger.debug(f'Metrics saved to {filepath}')
+    detailed_logger.info(f'Metrics saved to {filepath}')
 
 
     if args.train_tn:
@@ -648,10 +658,10 @@ if args.eval_ri:
         # filepath_ls.parent.mkdir(parents=True, exist_ok=True)
 
         df_kick_ex.round(4).to_csv(filepath_ex, index=True)
-        detailed_logger.debug(f'Kickout saved to {filepath_ex}')
+        detailed_logger.info(f'Kickout saved to {filepath_ex}')
         
         # df_kick_ls.round(4).to_csv(filepath_ls, index=True)
-        # detailed_logger.debug(f'Kickout saved to {filepath_ls}')
+        # detailed_logger.info(f'Kickout saved to {filepath_ls}')
 
 else:
-    detailed_logger.debug(f'No evaluation requested')
+    detailed_logger.info(f'No evaluation requested')
