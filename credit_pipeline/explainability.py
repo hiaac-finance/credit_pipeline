@@ -620,18 +620,23 @@ class Dice:
         List of features that can be used on conterfactuals
     sparsity_weight: float
         Parameter, weight for sparsity in optimization problem
+    clean_solutions: bool
+        If True, the solutions will be cleaned to avoid small changes in the features
     """
 
-    def __init__(self, X, Y, pipeline, n_cfs, mutable_features, sparsity_weight=0.2):
+    def __init__(self, X, Y, pipeline, n_cfs, mutable_features, categoric_mutable_features, sparsity_weight=0.2, clean_solutions=False):
         self.total_CFs = n_cfs
         self.sparsity_weight = sparsity_weight
+        self.clean_solutions = clean_solutions
         self.mutable_features = mutable_features
         X_preprocess = pipeline[:2].transform(X)
         self.features = X_preprocess.columns.tolist()
         self.categoric_features = (
             pipeline[1].transformers_[1][2].copy()
             + pipeline[1].transformers_[2][2].copy()
+            + categoric_mutable_features
         )
+        self.categoric_features = list(set(self.categoric_features))
         self.continuous_features = [
             col for col in self.features if col not in self.categoric_features
         ]
@@ -640,12 +645,21 @@ class Dice:
         dice_model = dice_ml.Model(
             model=self.model, backend="sklearn", model_type="classifier"
         )
+        self.permitted_range = {}
+        for col in self.features:
+            if col in self.categoric_features:
+                self.permitted_range[col] = X_preprocess[col].unique().tolist()
+                if len(self.permitted_range[col]) == 1:
+                    self.permitted_range[col] = [self.permitted_range[col][0], self.permitted_range[col][0]]
+            else:
+                self.permitted_range[col] = np.percentile(X_preprocess[col], [1, 99]).tolist()
         X_extended = X_preprocess.copy()
         X_extended["target"] = Y
         dice_data = dice_ml.Data(
             dataframe=X_extended,
             continuous_features=self.continuous_features,
             outcome_name="target",
+            permitted_range=self.permitted_range,
         )
         self.exp = dice_ml.Dice(dice_data, dice_model)
 
@@ -658,6 +672,7 @@ class Dice:
             total_CFs=self.total_CFs,
             desired_class="opposite",
             sparsity_weight=self.sparsity_weight,
+            proximity_weight=1,
             features_to_vary=self.mutable_features,
         )
         solutions = json.loads(dice_exp.to_json())["cfs_list"][0]
@@ -665,7 +680,41 @@ class Dice:
         if len(solutions) > 0:
             if isinstance(solutions[0], np.ndarray):
                 solutions = [s.tolist() for s in solutions]
+
+            if self.clean_solutions:
+                solutions = self.get_clean_solutions(individual_, solutions)
         return solutions
+    
+    def get_clean_solutions(self, individual, solutions):
+        individual_dtypes = [individual.dtypes[feat] for feat in individual.columns]
+        clean_solutions = []
+
+        for i, sol in enumerate(solutions):
+            sol = pd.DataFrame([sol], columns = individual.columns)
+            for j, dtype in enumerate(individual_dtypes):
+                # adjust dtypes. if numeric, verify if change is at least 0.01%
+                if dtype == "int64":
+                    sol.iloc[:, j] = sol.iloc[:, j].astype(int)
+                    change = abs(sol.iloc[0, j] - individual.iloc[0, j]) / abs(individual.iloc[0, j])
+                    if change < 1e-4:
+                        sol.iloc[:, j] = individual.iloc[0, j]
+                elif dtype == "float64":
+                    sol.iloc[:, j] = sol.iloc[:, j].astype(float)
+                    change = abs(sol.iloc[0, j] - individual.iloc[0, j]) / abs(individual.iloc[0, j])
+                    if change < 1e-4:
+                        sol.iloc[:, j] = individual.iloc[0, j]
+                else:
+                    sol.iloc[:, j] = sol.iloc[:, j].astype(str)
+
+                # if feature is not mutable, keep the original value
+                feat_name = self.features[j]
+                if not feat_name in self.mutable_features:
+                    sol.iloc[:, j] = individual.iloc[0, j]
+
+            clean_solutions.append(sol.values[0].tolist())
+        return clean_solutions
+
+
 
 
 def display_cfs(individual, cfs, pipeline, show_change=False):
