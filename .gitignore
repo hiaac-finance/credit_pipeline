@@ -1,13 +1,13 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
-*.py[cod]
-*$py.class
+*.py[cod]/
+*$py.class/
 
 # C extensions
-*.so
+*.so/
 
 # Distribution / packaging
-.Python
+.Python/
 env/
 build/
 develop-eggs/
@@ -84,7 +84,7 @@ celerybeat-schedule
 .env
 
 # virtualenv
-.venv
+.venv/
 venv/
 ENV/
 
@@ -96,7 +96,7 @@ ENV/
 .ropeproject
 
 # mkdocs documentation
-/site
+/site/
 
 # mypy
 .mypy_cache/
