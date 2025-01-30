@@ -1,0 +1,80 @@
+{
+    "os": "Linux-5.15.0-97-generic-x86_64-with-glibc2.35",
+    "python": "3.10.12",
+    "heartbeatAt": "2024-03-02T00:06:23.541755",
+    "startedAt": "2024-03-02T00:06:22.273098",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "/home/athyrson/HIAAC/credit_pipeline/scripts/LC_ri.py",
+    "codePathLocal": "LC_ri.py",
+    "codePath": "scripts/LC_ri.py",
+    "git": {
+        "remote": "https://github.com/hiaac-finance/credit_pipeline.git",
+        "commit": "b688a817d6895034ab6de4aae9fd35f307ac20c3"
+    },
+    "email": "athyrsonmr@gmail.com",
+    "root": "/home/athyrson/HIAAC/credit_pipeline",
+    "host": "athyrsonlab",
+    "username": "athyrson",
+    "executable": "/home/athyrson/HIAAC/credit_pipeline/playground_credit/bin/python",
+    "cpu_count": 4,
+    "cpu_count_logical": 8,
+    "cpu_freq": {
+        "current": 2772.535375,
+        "min": 400.0,
+        "max": 4700.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2800.0,
+            "min": 400.0,
+            "max": 4700.0
+        },
+        {
+            "current": 2800.0,
+            "min": 400.0,
+            "max": 4700.0
+        },
+        {
+            "current": 2800.0,
+            "min": 400.0,
+            "max": 4700.0
+        },
+        {
+            "current": 2800.0,
+            "min": 400.0,
+            "max": 4700.0
+        },
+        {
+            "current": 2580.283,
+            "min": 400.0,
+            "max": 4700.0
+        },
+        {
+            "current": 2800.0,
+            "min": 400.0,
+            "max": 4700.0
+        },
+        {
+            "current": 2800.0,
+            "min": 400.0,
+            "max": 4700.0
+        },
+        {
+            "current": 2800.0,
+            "min": 400.0,
+            "max": 4700.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 91.10977554321289,
+            "used": 29.46965789794922
+        }
+    },
+    "memory": {
+        "total": 15.349143981933594
+    }
+}

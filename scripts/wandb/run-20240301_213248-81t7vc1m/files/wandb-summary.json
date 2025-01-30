@@ -1,0 +1,1 @@
+{"Overall AUC": 0.7451049202749884, "Balanced Accuracy": 0.5578231292517007, "Accuracy": 0.875, "Precision": 0.5, "Recall": 0.1349206349206349, "F1": 0.2125, "_timestamp": 1709339570.4582503, "_runtime": 1.5626323223114014, "_step": 0, "_wandb": {"runtime": 0}}

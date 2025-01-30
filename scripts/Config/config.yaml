@@ -1,0 +1,19 @@
+data:
+  val_split  : 0
+  batch_size : 16
+train:
+  epochs         : 1000
+  alpha          : 0
+  gradient_accum : 1
+policy:
+  hidden_dim : 32
+  dropout    : 0
+  nhead      : 1
+  num_layers : 1
+  activation : 'relu'
+optimizer:
+  name : "Adam"
+  lr   : 3.0e-3
+scheduler:
+  name: "ExponentialLR"
+  gamma: 0.997
