@@ -5,29 +5,37 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import joblib
-from scipy import stats
-from sklearn.ensemble import IsolationForest
+import warnings
 
+from sklearn.ensemble import IsolationForest
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
+from sklearn.semi_supervised import LabelSpreading
 from sklearn.metrics import (accuracy_score, balanced_accuracy_score,
                             f1_score, precision_score, recall_score,
                             roc_auc_score, roc_curve)
 from scipy.stats import ks_2samp
-from sklearn.semi_supervised import LabelSpreading
 
 import credit_pipeline.training as tr
+import sys
+import sysconfig
+
+site_packages_path = sysconfig.get_paths()["purelib"]
+sys.path.append(site_packages_path)
+
 from submodules.topsis_python import topsis as top
 
 ri_datasets_path = "../data/riData/"
 seed_number = 880
 
+#should be moved to another file
+#Parameters for some example models obtained from the hyperparameter tuning
 params_dict = {
     'RandomForest_1' : {'bootstrap': True, 'ccp_alpha': 0.0, 'class_weight': None,
                         'criterion': 'entropy', 'max_depth': 10, 'max_features': 'log2',
                         'max_leaf_nodes': None, 'max_samples': None, 'min_impurity_decrease': 0.0,
                         'min_samples_leaf': 9, 'min_samples_split': 10, 'min_weight_fraction_leaf': 0.0,
-                        'n_estimators': 173, 'n_jobs': None, 'oob_score': False, 'random_state': seed_number,
+                        'n_estimators': 173, 'n_jobs': -1, 'oob_score': False, 'random_state': seed_number,
                         'verbose': 0, 'warm_start': False},
 
     'RandomForest_2' : {'n_estimators': 113, 'criterion': 'entropy', 'max_depth': 9,
@@ -72,7 +80,6 @@ params_dict = {
               'is_unbalance': True},
 
 
-
     'LG_balanced' : { 'solver': 'liblinear','penalty': 'l1',
             'random_state': seed_number,'max_iter': 10000,   'class_weight': 'balanced'},
 
@@ -80,15 +87,16 @@ params_dict = {
             'random_state': seed_number,'max_iter': 1000, },
 
     'LabelSpreading_1' : {'alpha': 0.9212289329319412, 'gamma': 0.024244533484333246,
-                        'kernel': 'knn', 'max_iter': 50, 'n_jobs': None,
+                        'kernel': 'knn', 'max_iter': 50, 'n_jobs': -1,
                           'n_neighbors': 10, 'tol': 0.001, },
     'LabelSpreading_2' : {'alpha': 0.2, 'gamma': 20,
-                        'kernel': 'knn', 'max_iter': 30, 'n_jobs': None,
+                        'kernel': 'knn', 'max_iter': 30, 'n_jobs': -1,
                           'n_neighbors': 7, 'tol': 0.001,},
 
     }
 
-#Cherry picked columns for AR policy
+#should be moved to another file
+#Cherry picked columns for AR policy (coluns with many missing values)
 cherry_cols = ["REGION_RATING_CLIENT", "REGION_RATING_CLIENT_W_CITY",
         "WEEKDAY_APPR_PROCESS_START", "HOUR_APPR_PROCESS_START",
         "FLAG_OWN_REALTY", "NAME_TYPE_SUITE", "NAME_INCOME_TYPE",
@@ -115,35 +123,92 @@ cherry_cols = ["REGION_RATING_CLIENT", "REGION_RATING_CLIENT_W_CITY",
         "AMT_REQ_CREDIT_BUREAU_WEEK", "AMT_REQ_CREDIT_BUREAU_MON",
         "AMT_REQ_CREDIT_BUREAU_QRT", "AMT_REQ_CREDIT_BUREAU_YEAR"]
 
-#Columns to use on RI study
+#should be moved to another file
+#Columns to use on RI study (columns with more informative value)
 cols_RI = ['AMT_CREDIT', 'EXT_SOURCE_1', 'EXT_SOURCE_2',
         'EXT_SOURCE_3', 'REGION_POPULATION_RELATIVE', 'DAYS_EMPLOYED', 'DAYS_BIRTH', 'AMT_INCOME_TOTAL',
         'CNT_CHILDREN', 'CNT_FAM_MEMBERS', 'REG_CITY_NOT_WORK_CITY', 'AMT_GOODS_PRICE',
         'FLAG_OWN_CAR', 'NAME_EDUCATION_TYPE', 'NAME_CONTRACT_TYPE']
 
-def fit_policy(dataset, eval_size=0.2, random_state=880, show_eval_results = False):
+def fit_policy(dataset, eval_size=0.2, target_var = "TARGET", random_state=880, show_eval_results = False,
+            fit_clas = LogisticRegression,
+            fit_params = params_dict['LG_balanced'],
+            fit_cols = cherry_cols,
+
+            ):
+    """
+    Fits a policy classifier to the dataset
+
+    Parameters
+    ----------
+    dataset : pd.DataFrame
+        The dataset to fit the policy
+    eval_size : float, optional
+        The size of the validation set, by default 0.2
+    random_state : int, optional
+        The random state, by default 880
+    show_eval_results : bool, optional
+        If True, shows the evaluation results, by default False
+    fit_clas : sklearn.base.BaseEstimator, optional
+        The classifier to fit, by default LogisticRegression
+    fit_params : dict, optional
+        The parameters to fit the classifier, by default params_dict['LG_balanced']
+    fit_cols : list, optional
+        The columns to use on the fit, by default cherry_cols
+    
+    Returns
+    -------
+    pd.DataFrame, sklearn.pipeline.Pipeline
+        The training set and the policy classifier    
+    """
+
+    # Split the dataset into training(output df) and policy(used to fit the policy) sets
     df_train, df_policy = train_test_split(
         dataset, test_size=0.2, random_state=random_state)
     
-    X_pol = df_policy.loc[:, cherry_cols]
-    y_pol = df_policy["TARGET"]
+    # Split the policy set into features and target
+    X_pol = df_policy.loc[:, fit_cols]
+    y_pol = df_policy[target_var]
+
+    # Split the policy set into training and validation sets
     X_train_pol, X_val_pol, y_train_pol, y_val_pol = train_test_split(
                             X_pol, y_pol, test_size=eval_size, random_state=random_state)
     
+    # Fit the policy classifier
     policy_clf = tr.create_pipeline(X_train_pol, y_train_pol, 
-                                    LogisticRegression(**params_dict['LG_balanced']), onehot=False, do_EBE=True)
+                                    fit_clas(**fit_params), onehot=False, do_EBE=True)
     policy_clf.fit(X_train_pol, y_train_pol)
 
+    # Show the evaluation results
     if show_eval_results:
         val_prob = policy_clf.predict_proba(X_val_pol)[:,1]
         print(roc_auc_score(y_val_pol, val_prob))
     
+
     return  df_train, policy_clf
 
 
-def accept_reject_split(X,y, policy_clf, threshold = 0.4):
+def accept_reject_split(X,y, policy_clf, threshold = 0.4):  
+    """
+    Splits the dataset into accepted and rejected samples based on a fitted policy classifier
+    
+    Parameters
+    ----------
+    X : pd.DataFrame
+        The features of the dataset
+    y : pd.Series
+        The target of the dataset
+    policy_clf : sklearn.pipeline.Pipeline
+        The fitted policy classifier
+    threshold : float, optional
+        The threshold to accept or reject samples, by default 0.4
+
+    """
+
+    # Calculate the probabilities of the samples being defaulters
     rej_prob = policy_clf.predict_proba(X)[:,1]
 
+    # Split the dataset into accepted and rejected samples
     X_accepts = X[rej_prob < threshold][cols_RI]
     X_rejects = X[rej_prob >= threshold][cols_RI]
     y_accepts = y[rej_prob < threshold]
@@ -153,7 +218,34 @@ def accept_reject_split(X,y, policy_clf, threshold = 0.4):
 
 #Metrics
 
-def calculate_kickout_metric(C1, C2, X_test_acp, y_test_acp, X_test_unl, acp_rate = 0.15):
+def calculate_kickout_metric(C1, C2, X_test_acp, y_test_acp, X_test_unl, acp_rate = 0.5):
+    """
+    [Deprecated. Use pre_kickout and faster_kickout instead.] \\
+    Calculate the kickout metric for a reject inference model.
+
+    Parameters
+    ----------
+    C1 : sklearn.pipeline.Pipeline
+        The classifier to predict the accepts
+    C2 : sklearn.pipeline.Pipeline
+        The classifier to predict the accepts and rejects
+    X_test_acp : pd.DataFrame
+        The features of the accepts
+    y_test_acp : pd.Series
+        The target of the accepts
+    X_test_unl : pd.DataFrame
+        The features of the unlabeled samples
+    acp_rate : float, optional
+        The acceptance rate, by default 0.5
+    
+    Returns
+    -------
+    float, int, int
+        The kickout metric, the number of kicked-out good samples, and the number of kicked-out bad samples
+    """
+
+    warnings.warn('This function is deprecated.', DeprecationWarning)
+    
     # Calculate predictions and obtain subsets A1_G and A1_B
     num_acp_1 = int(len(X_test_acp) * acp_rate) #number of Accepts
     y_prob_1 = C1.predict_proba(X_test_acp)[:, 1]
@@ -180,18 +272,147 @@ def calculate_kickout_metric(C1, C2, X_test_acp, y_test_acp, X_test_unl, acp_rat
     KG = A1_G.loc[indices_KG].shape[0]
     KB = A1_B.loc[indices_KB].shape[0]
 
+    if KG == 0 and KB == 0:
+        return 0, 0 ,0 
+
     # Calculate the share of bad cases in A1
-    p_B = A1_B.shape[0] / A1.shape[0]
+    p_B = (A1_B.shape[0] / A1.shape[0]) if (A1.shape[0] != 0 and A1_B.shape[0] != 0) else 1e-8
+
+    if p_B == 1e-8 and KG > 0:
+        return -1, KG , KB
 
     # Calculate the number of bad cases selected by the BM model
-    SB = A1_B.shape[0]
+    SB = A1_B.shape[0] if A1_B.shape[0] != 0 else 1e-8
+    # print('p_B, KG, KB, SB',p_B, KG, KB, SB)
 
-    # Calculate the kickout metric value
+    kickout = ((KB / p_B) - (KG / (1 - p_B))) / (SB / p_B)
+
+    return kickout, KG, KB
+
+def pre_kickout(C1, C2, X_test_acp, X_test_unl):
+    """
+        Calculate the probabilities of the accepts and all samples on the reject inference model.
+
+        Parameters
+        ----------
+        C1 : object
+            The trained classifier for accepts.
+        C2 : object
+            The trained classifier for all samples.
+        X_test_acp : DataFrame
+            The feature matrix of the accepts samples.
+        X_test_unl : DataFrame
+            The feature matrix of the unlabeled samples.
+
+        Returns
+        -------
+        y_prob_acp : Series
+            The predicted probabilities of the accepts samples.
+        y_prob_all : Series
+            The predicted probabilities of all samples.
+
+    """
+ 
+    y_prob_acp = C1.predict_proba(X_test_acp)[:, 1]
+    X_test_holdout = pd.concat([X_test_acp, X_test_unl])
+    y_prob_all = C2.predict_proba(X_test_holdout)[:, 1]
+
+    y_prob_acp = pd.Series(y_prob_acp, index=X_test_acp.index)
+    y_prob_all = pd.Series(y_prob_all, index=X_test_holdout.index)
+    return y_prob_acp, y_prob_all
+
+
+def faster_kickout(y_test_acp, y_prob_acp, y_prob_all, acp_rate = 0.5):
+    """
+        Calculate the kickout metric for a reject inference model.
+
+        Parameters
+        ----------
+        y_test_acp : array-like
+            The true labels for the acceptance samples in the ACP dataset.
+        y_prob_acp : array-like
+            The predicted probabilities for the acceptance samples in the ACP dataset.
+        y_prob_all : array-like
+            The predicted probabilities for all samples in the holdout dataset.
+        acp_rate : float, optional
+            The acceptance rate used to determine the threshold for acceptance predictions.
+            Default is 0.5.
+
+        Returns
+        -------
+        kickout : float
+            The kickout metric, which measures the difference between the number of bad cases
+            selected by the reject inference model and the number of good cases selected.
+        KG : int
+            The count of kicked-out good samples.
+        KB : int
+            The count of kicked-out bad samples.
+    """
+    # Calculate predictions and obtain subsets A1_G and A1_B
+    num_acp_1 = int(len(y_prob_acp) * acp_rate) #number of Accepts
+    threshold = np.percentile(y_prob_acp, 100 - (num_acp_1 / len(y_prob_acp)) * 100)
+    y_pred_acp = (y_prob_acp > threshold).astype('int')
+    A1 = y_prob_acp[y_pred_acp == 0]
+    A1_G = y_prob_acp[(y_pred_acp == 0) & (y_test_acp == 0)]
+    A1_B = y_prob_acp[(y_pred_acp == 0) & (y_test_acp == 1)]
+
+    # X_test_holdout = pd.concat([X_test_acp, X_test_unl])
+
+    # Calculate predictions on X_test_holdout and obtain subset A2
+    num_Acp_2 = int(len(y_prob_all) * acp_rate) #number of Accepts
+    threshold = np.percentile(y_prob_all, 100 - (num_Acp_2 / len(y_prob_all)) * 100)
+    y_pred_all = (y_prob_all > threshold).astype('int')
+    A2 = y_prob_all[y_pred_all == 0]
+
+    # Calculate indices of kicked-out good and bad samples
+    indices_KG = np.setdiff1d(A1_G.index, A2.index)
+    indices_KB = np.setdiff1d(A1_B.index, A2.index)
+
+    # Calculate the count of kicked-out good and bad samples
+    KG = A1_G.loc[indices_KG].shape[0]
+    KB = A1_B.loc[indices_KB].shape[0]
+
+    # if not any good or bad cases were kicked out
+    if KG == 0 and KB == 0:
+        return 0, 0 ,0 
+
+    # Calculate the share of bad cases in A1
+    p_B = (A1_B.shape[0] / A1.shape[0]) if (A1.shape[0] != 0 and A1_B.shape[0] != 0) else 1e-8
+
+    # if good cases were kicked out but no bad cases were kicked out when there were no bad cases in A1
+    if p_B == 1e-8 and KG > 0:
+        return -1, KG , KB
+
+    # Calculate the number of bad cases selected by the BM model
+    SB = A1_B.shape[0] if A1_B.shape[0] != 0 else 1e-8
+
+    # Calculate the kickout metric using the formula
     kickout = ((KB / p_B) - (KG / (1 - p_B))) / (SB / p_B)
 
     return kickout, KG, KB
 
 def risk_score_threshold(model, X, y, plot = False, defaul_acceped = 0.04):
+    """
+        Calculate the threshold for the risk score model based on the default acceptance rate.
+
+        Parameters
+        ----------
+        model : sklearn.pipeline.Pipeline
+            The trained risk score model.
+        X : pd.DataFrame
+            The feature matrix of the validation set.
+        y : pd.Series
+            The true labels of the validation set.
+        plot : bool, optional
+            If True, plots the threshold vs. cumulative mean graph. Default is False.
+        defaul_acceped : float, optional
+            The default acceptance rate. Default is 0.04.
+
+        Returns
+        -------
+        float
+            The threshold for the risk score model.
+    """
     #calculate probabilities on validation set
     y_probs = model.predict_proba(X)[:,1]
     #sort index of probabilies on ascending order
@@ -209,6 +430,26 @@ def risk_score_threshold(model, X, y, plot = False, defaul_acceped = 0.04):
     return thr_0
 
 def calculate_approval_rate(C1, X_val, y_val, X_test):
+    """
+        Calculate the approval rate of the risk score model.
+
+        Parameters
+        ----------
+
+        C1 : sklearn.pipeline.Pipeline
+            The trained risk score model.
+        X_val : pd.DataFrame
+            The feature matrix of the validation set.
+        y_val : pd.Series
+            The true labels of the validation set.
+        X_test : pd.DataFrame
+            The feature matrix of the test set.
+        
+        Returns
+        -------
+        float
+            The approval rate of the risk score model.
+    """
     threshold = risk_score_threshold(C1, X_val, y_val)
     y_prob = C1.predict_proba(X_test)[:,1]
     y_pred = (y_prob > threshold).astype(int)  # Convert probabilities to binary predictions
@@ -216,8 +457,11 @@ def calculate_approval_rate(C1, X_val, y_val, X_test):
 
     return n_approved/X_test.shape[0]
 
+#TBD
 def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
-                   X_unl = None, threshold_type = 'ks', acp_rate = 0.05):
+                   X_unl = None, threshold_type = 'ks', acp_rate = 0.5):
+    
+
     def get_best_threshold_with_ks(model, X, y):
         y_probs = model.predict_proba(X)[:,1]
         fpr, tpr, thresholds = roc_curve(y, y_probs)
@@ -257,12 +501,12 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
     def get_metrics_df(models_dict, y_true, use_threshold):
         if use_threshold:
             metrics_dict = {
-                "Overall AUC": (
+                "AUC": (
                     lambda x: roc_auc_score(y_true, x), False),
                 "KS": (
                     lambda x: evaluate_ks(y_true, x), False),
                 # "------": (lambda x: 0, True),
-                "Balanced Accuracy": (
+                "Balanced_Accuracy": (
                     lambda x: balanced_accuracy_score(y_true, x), True),
                 "Accuracy": (
                     lambda x: accuracy_score(y_true, x), True),
@@ -276,7 +520,7 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
             }
         else:
             metrics_dict = {
-                "Overall AUC": (
+                "AUC": (
                     lambda x: roc_auc_score(y_true, x), False),
                 "KS": (
                     lambda x: evaluate_ks(y_true, x), False),
@@ -297,7 +541,7 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
     #         del df_dict["-----"]
 
     if np.any(X_v):
-        df_dict['Approval Rate'] = []
+        df_dict['Approval_Rate'] = []
     if np.any(X_unl) and 'BM' in name_model_dict:
         df_dict['Kickout'] = []
         df_dict['KG'] = []
@@ -309,18 +553,18 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
                 if np.any(X_v):
                     a_r = calculate_approval_rate(model[0], X_v, y_v, X)
                     # acp_rate = a_r
-                    df_dict['Approval Rate'].append(a_r)
+                    df_dict['Approval_Rate'].append(a_r)
                 if np.any(X_unl) and 'BM' in name_model_dict:
                     kickout, kg, kb = calculate_kickout_metric(
                         name_model_dict['BM'][0], model[0], X, y, X_unl, acp_rate)
-                    df_dict['Kickout'].append(kickout*10)
+                    df_dict['Kickout'].append(kickout)
                     df_dict['KG'].append(kg)
                     df_dict['KB'].append(kb)
             else:
                 if np.any(X_v):
                     a_r = calculate_approval_rate(model, X_v, y_v, X)
                     # acp_rate = a_r
-                    df_dict['Approval Rate'].append(a_r)
+                    df_dict['Approval_Rate'].append(a_r)
                 if np.any(X_unl) and 'BM' in name_model_dict:
                     if isinstance(name_model_dict["BM"], list):
                         benchmark = name_model_dict["BM"][0]  # Assuming "BM" is a list
@@ -328,23 +572,25 @@ def get_metrics_RI(name_model_dict, X, y, X_v = None, y_v = None,
                         benchmark = name_model_dict["BM"]
 
                     kickout, kg, kb = calculate_kickout_metric(benchmark, model, X, y, X_unl, acp_rate)
-                    df_dict['Kickout'].append(kickout*10)
+                    df_dict['Kickout'].append(kickout)
                     df_dict['KG'].append(kg)
                     df_dict['KB'].append(kb)
         else:
             if np.any(X_v):
                 if isinstance(model,list):
                     a_r = calculate_approval_rate(model[0], X_v, y_v, X)
-                    df_dict['Approval Rate'].append(a_r)
+                    df_dict['Approval_Rate'].append(a_r)
                 else:
                     a_r = calculate_approval_rate(model, X_v, y_v, X)
-                    df_dict['Approval Rate'].append(a_r)
+                    df_dict['Approval_Rate'].append(a_r)
             if np.any(X_unl) and 'BM' in name_model_dict:
                 df_dict['Kickout'].append(0)
                 df_dict['KG'].append(0)
                 df_dict['KB'].append(0)
 
     metrics_df = pd.DataFrame.from_dict(df_dict, orient="index", columns=models_dict.keys())
+
+   
     return metrics_df
 
 
@@ -359,12 +605,11 @@ def expand_dataset(X_train, y_train, X_unl,
                         ):
     # get_shapes([X_train, y_train, X_unl, y_unl, X_test, y_test])
     params_dict['LightGBM_2'].update({'random_state': seed})
-
+    # print(X_unl.shape[0])
     if X_unl.shape[0] < 1:
-        return X_train, y_train, X_unl
+        return X_train, y_train, X_unl, False
 
     iso_params = {"contamination":contamination_threshold, "random_state":seed}
-
     rotulator = tr.create_pipeline(X_train, y_train, rot_class(**rot_params),
                                     onehot=True, normalize=True, do_EBE=True)
     rotulator.fit(X_train, y_train)
@@ -378,10 +623,54 @@ def expand_dataset(X_train, y_train, X_unl,
         unl_scores = iso.predict(X_unl)
         X_retrieved = X_unl[unl_scores == 1]
         n_non_out = X_retrieved.shape[0]
-        # print(n_non_out/X_unl.shape[0])
+        # print(f'%inliers for {number} = {n_non_out/X_unl.shape[0]}')
 
         if n_non_out < 1:
             return X_retrieved.iloc[[]], pd.Series([]), False
+        # Label the non-outliers based on the train set
+        y_ret_prob = rotulator.predict_proba(X_retrieved)[:, 1]
+        y_labels = pd.Series((y_ret_prob >= 0.5).astype('int'), index=X_retrieved.index)
+        y_retrieved = pd.Series(y_ret_prob, index=X_retrieved.index)
+        # y_aux = np.full(n_non_out, number)
+        # y_retrieved = y_retrieved[y_retrieved == y_aux]
+
+        # # Return empty dataframes if size is 0
+        # if size == 0:
+        #     return X_retrieved.iloc[[]], y_retrieved.iloc[[]]    
+
+        # Only add the most confident predictions to the new training set
+        size = size if size < len(y_retrieved) else int(len(y_retrieved)/2)
+
+        if number == 0:
+            # Get indices of lowest probabilities of defaulting
+            confident_indices = np.argpartition(y_retrieved, size)[:size]
+
+        elif number == 1:
+           # Get indices of highest probabilities of defaulting
+            confident_indices = np.argpartition(y_retrieved, -1*size)[-1*size:]
+ 
+        X_retrieved = X_retrieved.iloc[confident_indices]
+        y_labels = y_labels.iloc[confident_indices]
+
+        X_retrieved = X_retrieved[y_labels == number]
+        y_retrieved = y_labels[y_labels == number]
+        # print(y_retrieved.shape[0])
+
+        return X_retrieved, y_retrieved, True
+    
+    def retrieve_confident_samples_2(number, size):
+        # Fits outlier detection based on bad payers on the train set
+        # iso = tr.create_pipeline(X_train[y_train == number], y_train[y_train == number],
+        #                                         IsolationForest(**iso_params), do_EBE=True, crit = 0)
+        # iso.fit(X_train[y_train == number], y_train[y_train == number])
+        # # Retrieve the samples marked as non-outliers for training
+        # unl_scores = iso.predict(X_unl)
+        X_retrieved = X_unl.copy()#[unl_scores == 1]
+        # n_non_out = X_retrieved.shape[0]
+        # print(f'%inliers for {number} = {n_non_out/X_unl.shape[0]}')
+
+        # if n_non_out < 1:
+        #     return X_retrieved.iloc[[]], pd.Series([]), False
         # Label the non-outliers based on the train set
         y_ret_prob = rotulator.predict_proba(X_retrieved)[:, 1]
         y_labels = pd.Series((y_ret_prob >= 0.5).astype('int'), index=X_retrieved.index)
@@ -425,6 +714,7 @@ def expand_dataset(X_train, y_train, X_unl,
 
     intersection = X_retrieved_0.index.intersection(X_retrieved_1.index)
     if len(intersection) > 0:
+        print(f'intersection = {len(intersection)}')
         X_retrieved_0 = X_retrieved_0.drop(intersection)
         y_retrieved_0 = y_retrieved_0.drop(intersection)
 
@@ -467,7 +757,7 @@ def create_datasets_with_ri(X_train, y_train, X_unl,
                                 rot_class = LGBMClassifier,
                                 rot_params = params_dict['LightGBM_2'],
                                 seed = 880,
-                                verbose = True,
+                                verbose = False,
                                 technique = 'extrapolation',
                                ):
 
@@ -476,7 +766,7 @@ def create_datasets_with_ri(X_train, y_train, X_unl,
     unl_list = [X_unl]
     log_dict = {}
 
-    updated_X_train, updated_y_train, updated_X_unl =  X_train, y_train, X_unl
+    updated_X_train, updated_y_train, updated_X_unl =  X_train.copy(), y_train.copy(), X_unl.copy()
     flag = True
 
     for i in range(iterations):
@@ -495,7 +785,7 @@ def create_datasets_with_ri(X_train, y_train, X_unl,
                                                 rot_class, rot_params, seed,
                                                 )
         if flag == False:
-            print(i, updated_y_train.shape)
+            print(f'iteration -{i} adds {updated_y_train.shape[0] - y_train.shape[0]} samples')
             break
         X_train_list.append(updated_X_train)
         y_train_list.append(updated_y_train)
@@ -508,7 +798,7 @@ def create_datasets_with_ri(X_train, y_train, X_unl,
     return log_dict
 
 def trusted_non_outliers(X_train, y_train, X_unl,
-                                X_val, y_val,
+                                X_val = None, y_val = None,
                                 iterations = 50,
                                 contamination_threshold = 0.12,
                                 size = 1000,
@@ -518,10 +808,11 @@ def trusted_non_outliers(X_train, y_train, X_unl,
                                 rot_class = LGBMClassifier,
                                 rot_params = params_dict['LightGBM_2'],
                                 seed= 880,
-                                verbose = False,
+                                return_all = False,
                                 output = -1,
                                 save_log = True,
                                 technique = 'extrapolation',
+                                acp_rate = 0.5,
                                 ):
     """_summary_
 
@@ -561,18 +852,24 @@ def trusted_non_outliers(X_train, y_train, X_unl,
     _type_
         _description_
     """
+    auto = False
     clf_params.update({'random_state': seed})
+    if p == "auto":
+        print(f'p = {p}')
+        p = round((1.5)*(y_train.mean()),3)
+        print(f'y = {y_train.mean()}')
+        print(f'p = {p}')
+        auto = True
 
     datasets = create_datasets_with_ri(X_train, y_train, X_unl,
-                                iterations,
-                                contamination_threshold,
-                                size,
-                                p,
-                                rot_class,
-                                rot_params,
-                                seed,
-                                verbose,
-                                technique)
+                                iterations = iterations,
+                                contamination_threshold = contamination_threshold,
+                                size = size,
+                                p = p,
+                                rot_class = rot_class,
+                                rot_params = rot_params,
+                                seed = seed,
+                                technique = technique)
     dict_clfs = {}
     sus_iters = len(datasets["X"])
     for i in range(sus_iters):
@@ -588,28 +885,171 @@ def trusted_non_outliers(X_train, y_train, X_unl,
             dict_clfs['TN_'+str(i)] = trusted_clf
 
     if output != -1:
-        metrics_value = get_metrics_RI(dict_clfs, X_val, y_val, X_unl=X_unl, threshold_type='none')
+        metrics_value = get_metrics_RI(dict_clfs, X_val, y_val, X_unl=X_unl,
+                                        threshold_type='none', acp_rate=acp_rate)
+        # print(metrics_value)
 
-        values = metrics_value.loc[["Overall AUC", "KS", "Kickout"]].T.to_numpy()
-        weights = [1,1,1]
-        criterias = np.array([True, True, True])
+        values = metrics_value.loc[["Overall AUC", "Kickout"]].T.to_numpy()
+        values = values[1:]
+        weights = [1,1]
+        criterias = np.array([True, True])
         t = top.Topsis(values, weights, criterias)
         t.calc()
-        output = t.rank_to_best_similarity()[0] - 1
+        output = t.rank_to_best_similarity()[0]
         print(f'best iteration: {output}')
 
 
     if save_log == True:
-        filepath = Path(os.path.join(ri_datasets_path,f'TN-{seed}.joblib'))
+        if auto:
+            filepath = Path(os.path.join(ri_datasets_path,f'TN-{seed}-auto.joblib'))
+            if technique == 'LS':
+                filepath = Path(os.path.join(ri_datasets_path,f'TN+-{seed}-auto.joblib'))
+        else:
+            filepath = Path(os.path.join(ri_datasets_path,f'TN-{seed}-{p}.joblib'))
+            if technique == 'LS':
+                filepath = Path(os.path.join(ri_datasets_path,f'TN+-{seed}-{p}.joblib'))
         filepath.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(dict_clfs, filepath)
+
+    if return_all:
+        return dict_clfs, datasets
     
     X_train = datasets["X"][output]
     y_train = datasets["y"][output]
 
     trusted_clf = tr.create_pipeline(X_train, y_train, clf_class(**clf_params))
     trusted_clf.fit(X_train, y_train)
+    if technique == 'LS':
+        return {'TN+': trusted_clf}
     return {'TN': trusted_clf}
+
+def evaluate_best_it(models, X_val, y_val, R_val, low_AR, high_AR, weights, criterias):
+    output_dict = {}
+    values = []
+
+    # Iterate over each model in the models_dict
+    for it in list(models.keys()):
+        ar_dict = {}
+        auc_value = roc_auc_score(y_val, models[it].predict_proba(X_val)[:,1])
+        p_acp, p_all = pre_kickout(models['BM'], models[it], X_val, R_val)
+        # Iterate over the range of values from low_AR to high_AR
+        for a in range(low_AR, high_AR):
+            AR = a/100
+            # Calculate kickout value
+            kick_value = faster_kickout(y_val, p_acp, p_all, acp_rate=AR)[0]
+            # Store the kickout value for the current AR value in the ar_dict
+            ar_dict[a] = kick_value
+        # Create a list containing the auc_value and the ar_dict
+        it_values = [auc_value, ar_dict]
+        # Append the it_values to the values list
+        values.append(it_values)
+        
+    values = np.array(values)
+    # Iterate over the range of values from low_AR to high_AR
+    for a in range(low_AR, high_AR):
+        # Create a list of pairs containing the values from the first column of 'values' and the 'a'th element of the second column
+        values_by_ar = [[j, k] for j, k in zip(values[1:, 0], [i[a] for i in values[1:, 1]])]   
+        # Create a Topsis object with the 'values_by_ar', 'weights', and 'criterias'
+        t = top.Topsis(values_by_ar, weights, criterias)
+        # Calculate the Topsis rankings
+        t.calc()
+        # Get the rank-to-best similarity and subtract 1 to get the best iteration
+        output = t.rank_to_best_similarity()[0]
+        # Store the best iteration for the current AR value in the output_dict
+        output_dict[a] = output
+        # print(f'best iteration for AR {a}: {output} with values: {values[:,1]}')
+        # Log the best iteration for the current AR value
+    return output_dict
+
+
+def calculate_metrics_best_model(models_dict, X_eval, y_eval, R_eval, low_AR, high_AR):
+    # in this loop we will, for each AR, calculate the metrics for the best model
+    for a in range(low_AR, high_AR):
+        AR = a/100
+        keys_to_extract = ['BM', a]
+        # sub_dict is a dict containing only the models in keys_to_extract because we only
+        # want to evaluate these models
+        sub_dict = {k: models_dict[k] for k in keys_to_extract if k in models_dict}
+        ar_df = get_metrics_RI(sub_dict, X_eval, y_eval, X_unl = R_eval, acp_rate=AR)
+
+        # this if is needed because in the first iteration we need to create the dataframes
+        if a == low_AR:
+            df = ar_df.loc[:,'BM']
+
+        # we drop because each iteration will add the BM row again
+        ar_df = ar_df.drop('BM', axis=1)
+
+        # this dataframe will contain the metrics for each model in each AR
+        # being each model the best model for the respective AR
+        df = pd.concat([df, ar_df], axis=1)
+        
+    return df
+        
+
+def area_under_the_kick(models_dict, X_eval, y_eval, R_eval, low_AR, high_AR):
+    TN_dict = {}
+    # in this loop we will, for each AR, calculate the kickout value for each model
+    for it in models_dict.keys():
+        # Generate predictions for model 'BM' and current model 'it'
+        p_acp, p_all = pre_kickout(models_dict['BM'], models_dict[it], X_eval, R_eval)
+        
+        ar_dict = {}
+        for a in range(low_AR, high_AR):
+            AR = a / 100
+            # Calculate kickout value
+            kick_value = faster_kickout(y_eval, p_acp, p_all, acp_rate=AR)[0]
+            ar_dict[a] = kick_value
+
+    # Store the results for the current 'it'
+        TN_dict[it] = ar_dict
+
+    ARs = sorted(ar_dict.keys())
+    tdf = pd.DataFrame(TN_dict, index=ARs)
+    
+    # tdf contains the kickout values for each model in each AR
+    return tdf
+
+def evaluate_by_AUC_AUK(models, X_val, y_val, R_val, weights = [1,1], criterias = [True, True],
+                                 low_AR = 0, high_AR = 100):
+    values = []
+    kick_ar = area_under_the_kick(models, X_val, y_val, R_val, low_AR, high_AR).mean().round(3)
+    i = 0
+    for model in models.keys():
+        kick = kick_ar[model]
+        auc = roc_auc_score(y_val, models[model].predict_proba(X_val)[:,1]).round(3)
+        values.append([auc, kick, i])
+        i+=1
+    values = np.array(values)
+
+    t = top.Topsis(values[1:,:2], weights, criterias)
+    # Calculate the Topsis rankings
+    t.calc()
+
+    # Get the rank-to-best similarity and subtract 1 to get the best iteration
+    output = t.rank_to_best_similarity()[0]
+
+    return output, values[output]
+    
+def evaluate_by_AUC_AUK_IT(models, X_val, y_val, R_val, weights = [5,5,1], criterias = [True, True, True],
+                                 low_AR = 0, high_AR = 100):
+    values = []
+    kick_ar = area_under_the_kick(models, X_val, y_val, R_val, low_AR, high_AR).mean().round(3)
+    i = 0
+    for model in models.keys():
+        kick = kick_ar[model]
+        auc = roc_auc_score(y_val, models[model].predict_proba(X_val)[:,1]).round(3)
+        values.append([auc, kick, i])
+        i+=1
+    
+    values = np.array(values)
+
+    t = top.Topsis(values[1:,:], weights, criterias)
+    # Calculate the Topsis rankings
+    t.calc()
+    # Get the rank-to-best similarity and subtract 1 to get the best iteration
+    output = t.rank_to_best_similarity()[0]+1
+
+    return output, values[output]
 
 
 #---------Other Strategies----------
@@ -686,6 +1126,7 @@ def augmentation(X_train, y_train, X_unl, mode = 'up', seed = seed_number):
         _description_, by default 'up'
     """
     params_dict['LightGBM_2'].update({'random_state': seed})
+    # params_dict['LG_balanced'].update({'random_state': seed})
     #--------------Get Data----------------
     #Create dataset based on Approved(1)/Decline(0) condition
     X_aug_train = pd.concat([X_train, X_unl])
@@ -697,6 +1138,7 @@ def augmentation(X_train, y_train, X_unl, mode = 'up', seed = seed_number):
     y_aug_train = pd.Series(np.concatenate([train_y, unl_y]), index = X_aug_train.index)
 
     #--------------Get Weights----------------
+    # weight_classifier = tr.create_pipeline(X_aug_train, y_aug_train, LGBMClassifier(**params_dict['LightGBM_2']))
     weight_classifier = tr.create_pipeline(X_aug_train, y_aug_train, LGBMClassifier(**params_dict['LightGBM_2']))
     weight_classifier.fit(X_aug_train, y_aug_train)
 
@@ -708,7 +1150,6 @@ def augmentation(X_train, y_train, X_unl, mode = 'up', seed = seed_number):
 
     #Downward: ŵ = w * (1 - p(A))
     acp_weights_down = 1 * (1 - weights[:X_train.shape[0]])
-
     ##--------------Fit classifier----------------
     if mode == 'up':
         augmentation_classifier_up = tr.create_pipeline(X_train, y_train, LGBMClassifier(**params_dict['LightGBM_2']))
@@ -719,7 +1160,7 @@ def augmentation(X_train, y_train, X_unl, mode = 'up', seed = seed_number):
         augmentation_classifier_down = tr.create_pipeline(X_train, y_train, LGBMClassifier(**params_dict['LightGBM_2']))
         augmentation_classifier_down.fit(X_train, y_train, classifier__sample_weight = acp_weights_down)
 
-        return {'A-DW': augmentation_classifier_down}
+        return {'A-DW': augmentation_classifier_down}#, acp_weights_down,  weights[:X_train.shape[0]], weights]}
 
 def fuzzy_augmentation(X_train, y_train, X_unl, seed = seed_number):
     """[Fuzzy-Parcelling](Anderson, 2022)
@@ -729,7 +1170,7 @@ def fuzzy_augmentation(X_train, y_train, X_unl, seed = seed_number):
     X_train : _type_
         _description_
     y_train : _type_
-        _description_
+        _description_w
     X_unl : _type_
         _description_
     """
@@ -798,6 +1239,8 @@ def extrapolation(X_train, y_train, X_unl, mode = "C", seed = seed_number):
     elif mode == "C":
         new_X_train = pd.concat([X_train,X_unl[y_prob_unl>0.8], X_unl[y_prob_unl<0.15]])
         new_y_train = pd.concat([y_train,y_label_unl_s[y_prob_unl>0.8], y_label_unl_s[y_prob_unl<0.15]])
+        print(f'new_X_train shape: {new_X_train.shape[0]}')
+        print(f'old_X_train shape: {X_train.shape[0]}')
     else:
         return {}
 
@@ -903,9 +1346,6 @@ def label_spreading(X_train, y_train, X_unl, return_labels = False, seed = seed_
     y_unl_ls = np.array([-1]*X_unl_ls.shape[0])
     y_combined = np.concatenate([y_train_ls.array, y_unl_ls])
     y_combined = pd.Series(y_combined, index=X_combined.index)
-
-    n_labeled_points = y_train_ls.shape[0]
-    indices = np.arange(y_combined.shape[0])
 
     #--------------Predict labels on the unlabeled data---------------
     lp_model = tr.create_pipeline(X_combined, y_combined, LabelSpreading(**params_dict['LabelSpreading_2']))
