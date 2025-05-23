@@ -14,7 +14,6 @@ requirements = [
     "pandas<2.1.0",
     "numpy",
     "scikit-learn>1.2.2",
-    "tensorflow",
     "matplotlib",
     "seaborn",
     "dash-bio",

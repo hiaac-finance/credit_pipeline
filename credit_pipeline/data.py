@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import pandas as pd
 import credit_pipeline.data_exploration as dex
 
@@ -13,24 +14,25 @@ def download_datasets():
     os.system("rm data.zip")
 
 
-def prepare_datasets():
+def prepare_datasets(data_path="data"):
     """
     Function that preprocess the datasets and save them in the data/prepared folder.
     """
+    if Path.cwd().name != "scripts":
+        data_path = '../data'
     # make dir if not exist
-    os.makedirs("data/prepared", exist_ok=True)
-
+    os.makedirs(os.path.join(data_path, "prepared"), exist_ok=True)
     # home credit
-    df = dex.read_csv_encoded("data/HomeCredit", "application_train.csv")
+    df = dex.read_csv_encoded(os.path.join(data_path, "HomeCredit"), "application_train.csv")
     df = df.drop(columns=["SK_ID_CURR", "OCCUPATION_TYPE", "ORGANIZATION_TYPE"])
     df = df.rename(columns={"TARGET": "DEFAULT"})
     cat_cols = df.loc[:, df.dtypes == "object"].columns.tolist()
     for col in cat_cols:
         df[col] = pd.Categorical(df[col])
-    df.to_csv("data/prepared/homecredit.csv", index=False)
+    df.to_csv(os.path.join(data_path, "prepared/homecredit.csv"), index=False)
 
     # taiwan
-    df = dex.read_csv_encoded("data/Taiwan/", "Taiwan.csv")
+    df = dex.read_csv_encoded(os.path.join(data_path, "Taiwan"), "Taiwan.csv")
     df.columns = df.iloc[0, :].tolist()
     df = df.iloc[1:, :]
     df = df.drop(columns=["ID"])
@@ -70,10 +72,10 @@ def prepare_datasets():
     ]
     for col in cat_cols:
         df[col] = pd.Categorical(df[col])
-    df.to_csv("data/prepared/taiwan.csv", index=False)
+    df.to_csv(os.path.join(data_path, "prepared/taiwan.csv"), index=False)
 
     # german
-    df = dex.read_csv_encoded("data/German/", "german.csv")
+    df = dex.read_csv_encoded(os.path.join(data_path, "German"), "german.csv")
     df.columns = [
         "CheckingAccount",
         "Duration",
@@ -198,7 +200,7 @@ def prepare_datasets():
     ]
     for col in cat_cols:
         df[col] = pd.Categorical(df[col])
-    df.to_csv("data/prepared/german.csv", index=False)
+    df.to_csv(os.path.join(data_path, "prepared/german.csv"), index=False)
 
 
 def load_dataset(dataset_name):

@@ -2,7 +2,6 @@ numpy
 matplotlib
 pandas==2.0.3
 seaborn
-tensorflow
 chardet
 scikit-learn==1.4.0
 optuna
