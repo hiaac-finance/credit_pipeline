@@ -168,7 +168,7 @@ class Extrapolation(RejectInferenceAlg):
             "only_1",
             "all",
             "confident",
-        ], "augmentation_type must be 'only_1', 'all' or 'confident'."
+        ], "Extrapolation type must be 'only_1', 'all' or 'confident'."
         self.augmentation_type = augmentation_type
 
     def update_data(self, X, y, X_unl):

@@ -23,7 +23,7 @@ import sysconfig
 site_packages_path = sysconfig.get_paths()["purelib"]
 sys.path.append(site_packages_path)
 
-from submodules.topsis_python import topsis as top
+# from submodules.topsis_python import topsis as top
 
 ri_datasets_path = "../data/riData/"
 seed_number = 880
@@ -202,7 +202,6 @@ def accept_reject_split(X,y, policy_clf, threshold = 0.4):
         The fitted policy classifier
     threshold : float, optional
         The threshold to accept or reject samples, by default 0.4
-
     """
 
     # Calculate the probabilities of the samples being defaulters
