@@ -1,5 +1,6 @@
 import os
 import joblib
+import numpy as np
 import pandas as pd
 from lightgbm import LGBMClassifier
 from sklearn.model_selection import train_test_split
@@ -53,7 +54,7 @@ def load_data(fold):
     data = pd.read_csv(dataset)
 
     # Subamostragem estratificada (caso TARGET seja binária)
-    data = data.groupby("TARGET", group_keys=False).apply(lambda x: x.sample(frac=0.2, random_state=fold))
+    # data = data.sample(frac=0.2, random_state=fold)
 
     # Divide de forma reprodutível
     train_val, test = train_test_split(data, test_size=0.2, stratify=data["TARGET"], random_state=fold)
@@ -69,17 +70,18 @@ def load_data(fold):
 
     # Aplicação da política
     X_train_acp, X_train_rej, y_train_acp, y_train_rej = reject_inference.accept_reject_split(X_train, y_train, policy_clf, tr_policy)
+    X_val_acp, X_val_rej, y_val_acp, y_val_rej = reject_inference.accept_reject_split(X_val, y_val, policy_clf, tr_policy)
     X_test_acp, X_test_rej, y_test_acp, y_test_rej = reject_inference.accept_reject_split(X_test, y_test, policy_clf, tr_policy)
 
     return (
-        X_train_acp.reset_index(drop=True),
-        y_train_acp.reset_index(drop=True),
-        X_val.reset_index(drop=True),
-        y_val.reset_index(drop=True),
-        X_test_acp.reset_index(drop=True),
-        y_test_acp.reset_index(drop=True),
-        X_train_rej.reset_index(drop=True),
-        X_test_rej.reset_index(drop=True),
+        X_train_acp,#.reset_index(drop=True),
+        y_train_acp,#.reset_index(drop=True),
+        X_val_acp,#.reset_index(drop=True),
+        y_val_acp,#.reset_index(drop=True),
+        X_test_acp,#.reset_index(drop=True),
+        y_test_acp,#.reset_index(drop=True),
+        X_train_rej,#.reset_index(drop=True),
+        X_test_rej,#.reset_index(drop=True),
     )
 
 
@@ -94,7 +96,7 @@ def evaluate_ri(models_dict, X, y, X_v, y_v, X_unl):
         threshold_type='default'
     )
 
-    print(results)
+    print(results.round(3))
 
     output = []
     for model in models_dict.keys():
@@ -110,8 +112,8 @@ def evaluate_ri(models_dict, X, y, X_v, y_v, X_unl):
 
         output.append({
             "method": model,
-            "auc": auc,
-            "kickout": kickout
+            "auc": auc.round(3),
+            "kickout": kickout.round(3)
         })
 
     return output
@@ -149,28 +151,36 @@ def experiment():
         print(data_exploration.get_shapes(X_train, y_train, X_val, y_val, X_test, y_test, X_unl, X_unl_test))
 
         X_train_ri = pd.concat([X_train, X_unl], axis=0)
-        y_train_ri = pd.concat([y_train, pd.Series([-1] * X_unl.shape[0])], axis=0)
-        models_dict = {}
-        for method in METHOD_NAMES:
-            model = gt_model(method)
+        y_train_ri = pd.Series(
+            np.concatenate([y_train.values, [-1] * len(X_unl)]),
+            index=X_train_ri.index  # Directly use X_train_ri's clean index
+    )
+
+    models_dict = {}
+    for method in METHOD_NAMES:
+        model = gt_model(method)
+        if method == "BM":
+            pipeline = training.create_pipeline(X_train, y_train, model)
+            pipeline.fit(X_train, y_train)
+        else:
             pipeline = training.create_pipeline(X_train_ri, y_train_ri, model)
             pipeline.fit(X_train_ri, y_train_ri)
-            models_dict[method] = pipeline
+        models_dict[method] = pipeline
 
-            metrics = evaluate_ri(models_dict, X_train, y_train, X_val, y_val, X_unl)
-            # save to disk
-            print(f"Saving model for fold {fold}, method {method}")
-            print(metrics)
-            # if not os.path.exists(f"{path}/{fold}"):
-            #     os.makedirs(f"{path}/{fold}")
-            # joblib.dump(
-            #     pipeline,
-            #     f"{path}/{fold}/{method}.pkl",
-            # )
-            # metrics.to_csv(
-            #     f"{path}/{fold}/{method}_metrics.csv",
-            #     index=False,
-            # )
+        metrics = evaluate_ri(models_dict, X_test, y_test, X_val, y_val, X_unl)
+        # save to disk
+        print(f"Saving model for fold {fold}, method {method}")
+        print(metrics)
+        # if not os.path.exists(f"{path}/{fold}"):
+        #     os.makedirs(f"{path}/{fold}")
+        # joblib.dump(
+        #     pipeline,
+        #     f"{path}/{fold}/{method}.pkl",
+        # )
+        # metrics.to_csv(
+        #     f"{path}/{fold}/{method}_metrics.csv",
+        #     index=False,
+        # )
 
 
 if __name__ == "__main__":
