@@ -113,28 +113,29 @@ def evaluate_ri(models_dict, X, y, X_v, y_v, X_unl, seed):
     return output
 
 
-def gt_model(method_name):
-    base_model = LGBMClassifier(**lgbm_params)
-    accept_model = LGBMClassifier(**lgbm_params)
+def gt_model(method_name, X, y, X_unl, seed):
     if method_name == "BM":
-        return base_model
+        benchmark = training.create_pipeline(X, y, LGBMClassifier(**lgbm_params))
+        benchmark.fit(X,y)
+        return {"BM": benchmark}
     elif method_name == "aug_sc":
-        return ri_models.AugSoftCutoff(base_model, accept_model)
+        return reject_inference.augmentation_with_soft_cutoff(X, y, X_unl, seed)
     elif method_name == "aug_up":
-        return ri_models.AugUpDown(base_model, accept_model, "up")
+        return reject_inference.augmentation(X, y, X_unl, mode="up", seed=seed)
     elif method_name == "aug_down":
-        return ri_models.AugUpDown(base_model, accept_model, "down")
+        return reject_inference.augmentation(X, y, X_unl, mode="down", seed=seed)
     elif method_name == "aug_fuzzy":
-        return ri_models.AugFuzzy(base_model, accept_model)
+        return reject_inference.fuzzy_augmentation(X, y, X_unl, seed)
     elif method_name.startswith("extrapolation"):
         extrapolation_type = method_name.split("-")[-1]
-        return ri_models.Extrapolation(base_model, accept_model, extrapolation_type)
+        mode = {"all":"A",  "only_1": "B","confident":"C"}
+        return reject_inference.extrapolation(X, y, X_unl, mode=mode[extrapolation_type], seed=seed)
     elif method_name == "ls":
-        return ri_models.LabelSpreading(base_model, accept_model)
+        return reject_inference.label_spreading(X, y, X_unl, seed=seed)
 
 
 def experiment(seed):
-    path = "../results/reject_inference"
+    path = "../results/reject_inference_old"
     n_folds = 10
 
     fold_metrics = pd.DataFrame()
@@ -152,14 +153,8 @@ def experiment(seed):
 
         models_dict = {}
         for method in METHOD_NAMES:
-            model = gt_model(method)
-            if method == "BM":
-                pipeline = training.create_pipeline(X_train, y_train, model)
-                pipeline.fit(X_train, y_train)
-            else:
-                pipeline = training.create_pipeline(X_train_ri, y_train_ri, model)
-                pipeline.fit(X_train_ri, y_train_ri)
-            models_dict[method] = pipeline
+            model = gt_model(method, X_train, y_train, X_unl, seed = seed+fold)
+            models_dict.update(model)
 
             # save to disk
             print(f"Saving model for fold {fold}, method {method}")

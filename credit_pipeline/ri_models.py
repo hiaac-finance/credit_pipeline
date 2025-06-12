@@ -150,7 +150,8 @@ class AugFuzzy(RejectInferenceAlg):
         X_fuzzy = np.concatenate([X, X_unl, X_unl])
         y_fuzzy = np.concatenate([y, np.zeros(X_unl.shape[0]), np.ones(X_unl.shape[0])])
 
-        self.accept_clf.fit(X_fuzzy, y_fuzzy)
+        # self.accept_clf.fit(X_fuzzy, y_fuzzy)
+        self.accept_clf.fit(X, y)
 
         unl_0_weights = self.accept_clf.predict_proba(X_unl)[:, 0]
         unl_1_weights = self.accept_clf.predict_proba(X_unl)[:, 1]
