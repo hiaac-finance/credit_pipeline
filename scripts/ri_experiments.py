@@ -148,7 +148,7 @@ def experiment(seed, n_folds = 1):
 
         X_train_ri = pd.concat([X_train, X_unl], axis=0)
         y_train_ri = pd.Series(
-            np.concatenate([y_train.values, [-1] * len(X_unl)]),
+            np.concatenate([y_train.values, [np.nan] * len(X_unl)]),
             index=X_train_ri.index)
 
         models_dict = {}

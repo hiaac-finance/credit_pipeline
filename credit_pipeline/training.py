@@ -81,6 +81,10 @@ class EBE(
         self.k = k
 
     def fit(self, X, y):
+        def mymean(x):
+            if np.isnan(x).all():
+                return 0
+            return np.nanmean(x)
         self.feature_names_in_ = []
         self.n_features, self.n_items = X.shape[1], X.shape[0]
         self._aux_dict_main = {}
@@ -91,7 +95,11 @@ class EBE(
             X_name = X.iloc[:, i].name
 
             y = pd.Series(y, index=X.index)
-            aux_dict = pd.Series(y).groupby(Xi).agg(["mean", "count"]).to_dict()
+            aux_dict = pd.Series(y).groupby(Xi).agg([mymean, "count"]).to_dict()
+            aux_dict = {
+                "mean": aux_dict["mymean"],
+                "count": aux_dict["count"],
+            }
             self._aux_dict_main[X_name] = aux_dict
             self.feature_names_in_.append(X_name)
             self.mean[X_name] = y.mean()

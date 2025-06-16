@@ -45,6 +45,8 @@ class RejectInferenceAlg:
             y = y.values
 
         # separate X and X_unl based on y
+        # replace np.nan with -1 for unlabeled data
+        y = np.where(np.isnan(y), -1, y)
         X, X_unl = X[y != -1], X[y == -1]
         y = y[y != -1]
 
