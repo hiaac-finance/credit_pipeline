@@ -93,7 +93,8 @@ def evaluate_ri(models_dict, X, y, X_v, y_v, X_unl, seed):
         X, y,
         X_v, y_v,
         X_unl,
-        threshold_type='default'
+        threshold_type='default',
+        acp_rate=0.25,
     )
 
     print(results.round(3))
@@ -133,9 +134,9 @@ def gt_model(method_name):
         return ri_models.LabelSpreading(base_model, accept_model)
 
 
-def experiment(seed):
+def experiment(seed, n_folds = 1):
     path = "../results/reject_inference"
-    n_folds = 10
+    n_folds = n_folds
 
     fold_metrics = pd.DataFrame()
     for fold in range(n_folds):
@@ -157,7 +158,7 @@ def experiment(seed):
                 pipeline = training.create_pipeline(X_train, y_train, model)
                 pipeline.fit(X_train, y_train)
             else:
-                pipeline = training.create_pipeline(X_train_ri, y_train_ri, model)
+                pipeline = training.create_pipeline(X_train_ri,s y_train_ri, model)
                 pipeline.fit(X_train_ri, y_train_ri)
             models_dict[method] = pipeline
 
@@ -182,4 +183,4 @@ def experiment(seed):
 
 
 if __name__ == "__main__":
-    experiment(seed = SEED)
+    experiment(seed = SEED, n_folds = 25)
