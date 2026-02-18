@@ -196,6 +196,20 @@ def geometric_mean_accuracy(y_true, y_pred, z):
         * accuracy_score(y_true[z == 0], y_pred[z == 0])
     )
 
+def kickout(y_true, y_pred_base, y_pred_rej):
+
+    # Wrong predictions by the base model
+    wrong = (y_true == 1) & (y_pred_base == 0)
+    # Correct predictions by the reject model
+    kb = np.mean(y_pred_rej[wrong])
+
+    # Correct predictions by the base model
+    correct = (y_true == 0) & (y_pred_base == 0)
+    # Wrong predictions by the reject model
+    kg = np.mean(y_pred_rej[correct])
+
+    return kb - kg
+
 def create_eod_scorer(z, benefit_class=1):
     """Create a scorer for equal opportunity difference. The scorer can be used in hyperparameter tuning.
 
@@ -357,3 +371,31 @@ def get_fairness_metrics(name_model_dict, X, y, z, threshold=0.5, benefit_class=
     metrics = get_metrics_df(models_dict)
     metrics = metrics.reset_index().rename(columns={"index": "model"})
     return metrics
+
+def get_reject_inference_metrics(name_model_dict, y, threshold=0.5):
+    assert "base" in name_model_dict, "Base model must be provided in the input dict with key 'base'"
+
+    # Get the predictions for the base model of the labeled population
+    y_pred_base, _ = name_model_dict["base"]
+
+    # Then, calculate the kickout metric for each model
+    metrics = {}
+    for model_name, model in name_model_dict.items():
+        # model contains the predictions for labeled and unlabeled data
+        y_pred, y_pred_unl = model
+
+        
+
+        metrics.append({
+            "model": model_name,
+            "approval_rate": np.mean(np.concatenate([y_pred, y_pred_unl])),
+            "balanced_accuracy": balanced_accuracy_score(y, y_pred),
+            "kickout": kickout(y, y_pred_base, y_pred),
+        })
+
+    metrics = pd.DataFrame(metrics)        
+    return metrics
+
+
+
+
