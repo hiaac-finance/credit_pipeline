@@ -1,5 +1,4 @@
-Credit Pipeline
-===============
+# Credit Pipeline
 
 A general pipeline for Trustworthy Machine Learning on credit datasets,
 including functionalities for fairness, reject inference, and
@@ -7,8 +6,7 @@ explainability. The package facilitates the development of more ethical
 algorithms at every step of the ML pipeline for credit modelling.
 Supplementary material for the paper "Best Practices for Responsible Machine Learning in Credit Scoring".
 
-Install
--------
+## Install
 
 -  Clone the repository:
 
@@ -31,14 +29,12 @@ Another option is to use install the package within a Docker container.
 The file `Dockerfile` contains the specification of the container and the commands to build and run it.
  (Note: it is recommended to have prior knowledge of Docker to use this feature.)
 
-Usage
------
+## Usage
 
 Examples of using the diverse functionalities package are located in Jupyter Notebooks at ``examples/usage.ipynb``.
 
 
-Experiments
------
+## Experiments
 
 Experiments code is present at ``scripts/experiments.py``. To run, use the following command at the path ``scripts/``:
 
@@ -48,8 +44,7 @@ You can select the experiment between ["credit_models", "fairness"] and dataset 
 
 Experiments of reject inference are present in ``examples/reject_inference.ipynb`` and for explainability in ``examples/explainability.ipynb``.
 
-Contact
--------
+## Contact
 
 Dr. Marcos Medeiros Raimundo, project coordinator:
 mraimundo@ic.unicamp.br

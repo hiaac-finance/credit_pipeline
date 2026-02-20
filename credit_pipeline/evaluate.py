@@ -1,3 +1,4 @@
+from typing import Dict, Tuple
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -196,6 +197,22 @@ def geometric_mean_accuracy(y_true, y_pred, z):
         * accuracy_score(y_true[z == 0], y_pred[z == 0])
     )
 
+
+def kickout(y_true, y_pred_base, y_pred_rej):
+
+    # Wrong predictions by the base model
+    wrong = (y_true == 1) & (y_pred_base == 0)
+    # Correct predictions by the reject model
+    kb = np.mean(y_pred_rej[wrong])
+
+    # Correct predictions by the base model
+    correct = (y_true == 0) & (y_pred_base == 0)
+    # Wrong predictions by the reject model
+    kg = np.mean(y_pred_rej[correct])
+
+    return kb - kg
+
+
 def create_eod_scorer(z, benefit_class=1):
     """Create a scorer for equal opportunity difference. The scorer can be used in hyperparameter tuning.
 
@@ -206,16 +223,18 @@ def create_eod_scorer(z, benefit_class=1):
     benefit_class : int, optional
         Label of positive class to calculate metric, by default 1
     """
+
     def eod_scorer(y_true, y_pred):
         y_true_ = (y_true == benefit_class).astype("float")
         y_pred_ = (y_pred == benefit_class).astype("float")
         return equal_opportunity(y_true_, y_pred_, z)
-    
+
     return eod_scorer
 
-def create_fairness_scorer(fairness_goal, z, M = 10, benefit_class=1):
+
+def create_fairness_scorer(fairness_goal, z, M=10, benefit_class=1):
     """Create a scorer for fairness metrics. The scorer can be used in hyperparameter tuning.
-    
+
     It will return the value of the roc auc if the fairness goal is reached, otherwise it will return a low value.
 
     Parameters
@@ -229,6 +248,7 @@ def create_fairness_scorer(fairness_goal, z, M = 10, benefit_class=1):
     benefit_class : int, optional
         Label of positive class to calculate metric, by default 1
     """
+
     def fairness_scorer(y_true, y_pred, y_score_pred):
         y_true_ = (y_true == benefit_class).astype("float")
         y_pred_ = (y_pred == benefit_class).astype("float")
@@ -236,7 +256,10 @@ def create_fairness_scorer(fairness_goal, z, M = 10, benefit_class=1):
         if fairness_score <= fairness_goal:
             return roc_auc_score(y_true, y_score_pred)
         else:
-            return roc_auc_score(y_true, y_score_pred) - M * abs(fairness_score - fairness_goal)
+            return roc_auc_score(y_true, y_score_pred) - M * abs(
+                fairness_score - fairness_goal
+            )
+
     return fairness_scorer
 
 
@@ -275,16 +298,18 @@ def get_metrics(name_model_dict, X, y, threshold=0.5):
     def get_metrics_df(
         models_dict,
         y_true,
-    ):  
+    ):
         metrics_score_dict = {
-            "AUC" : lambda x: roc_auc_score(y_true, x) if x is not None else None,
-            "Brier Score" : lambda x: brier_score_loss(y_true, x) if x is not None else None,
+            "AUC": lambda x: roc_auc_score(y_true, x) if x is not None else None,
+            "Brier Score": lambda x: (
+                brier_score_loss(y_true, x) if x is not None else None
+            ),
         }
         metrics_dict = {
             "Balanced Accuracy": lambda x: balanced_accuracy_score(y_true, x),
             "Accuracy": lambda x: accuracy_score(y_true, x),
-            "Precision": lambda x: precision_score(y_true, x, zero_division=0), 
-            "Recall": lambda x: recall_score(y_true, x), 
+            "Precision": lambda x: precision_score(y_true, x, zero_division=0),
+            "Recall": lambda x: recall_score(y_true, x),
             "F1": lambda x: f1_score(y_true, x),
         }
         df_dict = {}
@@ -326,7 +351,7 @@ def get_fairness_metrics(name_model_dict, X, y, z, threshold=0.5, benefit_class=
     """
     models_dict = {}
     for model_name, pred in name_model_dict.items():
-        models_dict[model_name] = (pred == benefit_class).astype("int") 
+        models_dict[model_name] = (pred == benefit_class).astype("int")
 
     # transform y to array if it is a pandas series
     if type(y) == pd.Series:
@@ -356,4 +381,76 @@ def get_fairness_metrics(name_model_dict, X, y, z, threshold=0.5, benefit_class=
 
     metrics = get_metrics_df(models_dict)
     metrics = metrics.reset_index().rename(columns={"index": "model"})
+    return metrics
+
+
+def get_threshold_bad_rate(
+    y_true: np.array, y_probs: np.array, bad_rate: float = 0.25
+) -> float:
+    """Calculate the threshold that maximizes the true positives while keeping the false positives below the bad_rate.
+
+    Parameters
+    ----------
+    y_true : np.array
+        True labels.
+    y_probs : np.array
+        Predicted probabilities.
+    bad_rate : float, optional
+        The maximum allowed false positive rate (bad rate), by default 0.25
+
+    Returns
+    -------
+    float
+        The threshold that satisfies the bad rate constraint.
+    """
+    # Sort the predicted probabilities in descending order
+    sorted_indices = np.argsort(y_probs)[::-1]
+    y_true_sorted = y_true[sorted_indices]
+
+    # Calculate cumulative false positives and true positives
+    fp = np.cumsum(1 - y_true_sorted)
+    tp = np.cumsum(y_true_sorted)
+
+    # Calculate false positive rate (FPR)
+    fpr = fp / np.sum(1 - y_true_sorted) if np.sum(1 - y_true_sorted) > 0 else 0
+
+    # Find the threshold that keeps FPR below bad_rate
+    valid_thresholds = fpr <= bad_rate
+    if not np.any(valid_thresholds):
+        return 0.5  # Default threshold if no valid thresholds found
+
+    # Return the highest threshold that satisfies the constraint
+    max_valid_idx = np.max(np.where(valid_thresholds)[0])
+    return y_probs[sorted_indices[max_valid_idx]]
+
+
+def get_reject_inference_metrics(name_model_dict : Dict[str, Tuple[np.array, np.array]], y : np.array, bad_rate : float = 0.5):
+    assert (
+        "base" in name_model_dict
+    ), "Base model must be provided in the input dict with key 'base'"
+
+    # Get the predictions for the base model of the labeled population
+    y_probs_base, _ = name_model_dict["base"]
+    base_threshold = get_threshold_bad_rate(y, y_probs_base, bad_rate=bad_rate)
+    y_pred_base = (y_probs_base >= base_threshold).astype("int")
+
+    # Then, calculate the kickout metric for each model
+    metrics = []
+    for model_name, model in name_model_dict.items():
+        # model contains the predictions for labeled and unlabeled data
+        y_probs, y_probs_unl = model
+        threshold = get_threshold_bad_rate(y, y_probs, bad_rate=bad_rate)
+        y_pred = (y_probs >= threshold).astype("int")
+        y_pred_unl = (y_probs_unl >= threshold).astype("int")
+
+        metrics.append(
+            {
+                "model": model_name,
+                "approval_rate": np.mean(np.concatenate([y_pred, y_pred_unl])),
+                "balanced_accuracy": balanced_accuracy_score(y, y_pred),
+                "kickout": kickout(y, y_pred_base, y_pred),
+            }
+        )
+
+    metrics = pd.DataFrame(metrics)
     return metrics
