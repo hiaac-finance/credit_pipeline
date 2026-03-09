@@ -2,7 +2,6 @@ from typing import Dict, Tuple
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 import math
 from sklearn.metrics import (
     confusion_matrix,
@@ -16,20 +15,20 @@ from sklearn.metrics import (
 )
 
 
-def plot_confusion_matrix(y_true, y_pred):
-    """
-    Compute and plot confusion matrix given true values and predictions.
-    """
-    # Compute confusion matrix
-    cm = confusion_matrix(y_true, y_pred)
+# def plot_confusion_matrix(y_true, y_pred):
+#     """
+#     Compute and plot confusion matrix given true values and predictions.
+#     """
+#     # Compute confusion matrix
+#     cm = confusion_matrix(y_true, y_pred)
 
-    print("Accuracy of the model is: ", accuracy_score(y_true, y_pred))
+#     print("Accuracy of the model is: ", accuracy_score(y_true, y_pred))
 
-    # Plot confusion matrix
-    sns.heatmap(cm, annot=True, cmap="Blues", fmt="g")
-    plt.xlabel("Predicted")
-    plt.ylabel("True")
-    plt.show()
+#     # Plot confusion matrix
+#     sns.heatmap(cm, annot=True, cmap="Blues", fmt="g")
+#     plt.xlabel("Predicted")
+#     plt.ylabel("True")
+#     plt.show()
 
 
 def plot_prob_distribution(y_true, y_prob):
