@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "credit_pipeline"
+version = "0.0.1"
+authors = [
+  { name="Giovani Valdrighi", email="giovani.valdrighi@ic.unicamp.br" },
+  { name="Athyrson Machado Ribeiro", email="a203963@dac.unicamp.br" },
+  { name="Marcos Medeiros Raimundo", email="mraimundo@ic.unicamp.br" },
+]
+description = "A general pipeline for trustworthy machine learning on credit datasets."
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+dependencies = [
+    "pandas",
+    "numpy",
+    "scikit-learn",
+    "lightgbm",
+    "fairgbm",
+    "optuna",
+    "jupyterlab",
+    "matplotlib",
+    "gdown",
+    "chardet",
+]
+
+[project.urls]
+Homepage = "https://github.com/hiaac-finance/credit_pipeline"
+Issues = "https://github.com/hiaac-finance/credit_pipeline/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]

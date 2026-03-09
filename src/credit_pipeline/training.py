@@ -1,3 +1,4 @@
+from typing import Optional, Tuple, List, Dict
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold, train_test_split
@@ -68,7 +69,7 @@ hyperparam_spaces = {
         "alpha": {"low": 1e-3, "high": 1e3, "type": "float", "log": True},
         "epochs": {"low": 10, "high": 100, "type": "int", "step": 10},
         "class_weight": {"choices": [None, "balanced"], "type": "categorical"},
-        "batch_size" : {"low" : 128, "high" : 128, "type" : "int"}
+        "batch_size": {"low": 128, "high": 128, "type": "int"},
     },
 }
 
@@ -77,10 +78,10 @@ class EBE(
     BaseEstimator,
     TransformerMixin,
 ):
-    def __init__(self, k=1):
+    def __init__(self, k: int = 1):
         self.k = k
 
-    def fit(self, X, y):
+    def fit(self, X: pd.DataFrame, y: pd.Series) -> "EBE":
         self.feature_names_in_ = []
         self.n_features, self.n_items = X.shape[1], X.shape[0]
         self._aux_dict_main = {}
@@ -97,7 +98,7 @@ class EBE(
             self.mean[X_name] = y.mean()
         return self
 
-    def transform(self, X, y=None):
+    def transform(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> np.ndarray:
         Xt_list = []
         for i in range(self.n_features):
             Xi = X.iloc[:, i]
@@ -123,7 +124,9 @@ class EBE(
         Xt_array = np.hstack(Xt_list)
         return Xt_array
 
-    def get_feature_names_out(self, input_features=None):
+    def get_feature_names_out(
+        self, input_features: Tuple[pd.DataFrame, List]
+    ) -> List[str]:
         if isinstance(input_features, pd.DataFrame):
             return [col for col in input_features.columns]
         else:
@@ -155,19 +158,44 @@ def columns_by_type(dataframe, types_cols=["numeric"], debug=False):
 
 
 def create_pipeline(
-    X,
-    y,
-    classifier=None,
-    cat_cols="infer",
-    onehot=True,
-    onehotdrop=False,
-    normalize=True,
-    do_EBE=True,
-    crit=3,
+    X : pd.DataFrame,
+    y : pd.Series,
+    classifier : Optional[BaseEstimator] = None,
+    cat_cols : Tuple[str, List[str]] = "infer",
+    onehot : bool =True,
+    onehotdrop : bool =False,
+    normalize : bool =True,
+    do_EBE : bool =True,
+    crit: int = 3,
 ):
-    # def create_pipeline(X, y, classifier = None, onehot = True, onehotdrop = False,
-    #                 normalize = True, do_EBE = False, crit = 3, identify_columns = True,
-    #                 num_cols = [], cat_cols = [], ebe_cols = []):
+    """Creates a machine learning pipeline that includes preprocessing steps and a classifier. The pipeline is designed to handle both numeric and categorical features, with options for filling missing values, encoding categorical variables, normalizing numeric features, and applying a specified classifier.
+
+    Parameters
+    ----------
+    X : pd.DataFrame
+        Matrix of features.
+    y : pd.Series
+        Target variable, must be binary.
+    classifier : Optional[BaseEstimator], optional
+        Scikit-learn classifier, by default None
+    cat_cols : Tuple[str, List[str]], optional
+        Categorical columns, by default "infer"
+    onehot : bool, optional
+        Whether to use one-hot encoding, by default True
+    onehotdrop : bool, optional
+        Whether to drop one category per column when using one-hot encoding, by default False
+    normalize : bool, optional
+        Whether to normalize the numeric columns, by default True
+    do_EBE : bool, optional
+        If categorical columns should be encoded with EBE, by default True
+    crit : int, optional
+        Maximum number of categories for one-hot-encoding, features with more categories are encoded with EBE, by default 3
+
+    Returns
+    -------
+    sklearn.pipeline.Pipeline
+        A pipeline that preprocesses the data and applies the classifier. The pipeline includes filling NaN values, encoding categorical variables, normalizing numeric features, and applying the classifier.
+    """
     if cat_cols == "infer":
         num_cols = [
             col for col in X.columns if X[col].dtype.kind in ["b", "i", "u", "f", "c"]
@@ -209,7 +237,7 @@ def create_pipeline(
     )
     fill_pipe.set_output(transform="pandas")
 
-    #2: Ordinal encoder
+    # 2: Ordinal encoder
     encoder_pipe = ColumnTransformer(
         transformers=[
             ("num", "passthrough", num_cols),
@@ -225,13 +253,15 @@ def create_pipeline(
             ),
             (
                 "ebe",
-                EBE()
-                if do_EBE
-                else OrdinalEncoder(
-                    dtype=np.int64,
-                    handle_unknown="use_encoded_value",
-                    unknown_value=-1,
-                    encoded_missing_value=-1,
+                (
+                    EBE()
+                    if do_EBE
+                    else OrdinalEncoder(
+                        dtype=np.int64,
+                        handle_unknown="use_encoded_value",
+                        unknown_value=-1,
+                        encoded_missing_value=-1,
+                    )
                 ),
                 ebe_cols,
             ),
@@ -255,11 +285,13 @@ def create_pipeline(
         transformers=[
             (
                 "onehot_encoder",
-                OneHotEncoder(
-                    drop="if_binary", sparse_output=False, handle_unknown="ignore"
-                )
-                if onehotdrop
-                else OneHotEncoder(sparse_output=False, handle_unknown="ignore"),
+                (
+                    OneHotEncoder(
+                        drop="if_binary", sparse_output=False, handle_unknown="ignore"
+                    )
+                    if onehotdrop
+                    else OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+                ),
                 cat_cols,
             ),
         ],
@@ -559,7 +591,6 @@ def optimize_model_fast(
             del params["random_state"]
             model = model_class(**params)
 
-        
         model.fit(X_train, y_train, **fit_params)
 
         # Predict and evaluate the model
@@ -592,7 +623,7 @@ def optimize_model_fast(
     fit_params_wt_pip = fit_params.copy()
     for key in fit_params.keys():
         fit_params_wt_pip[key.split("__")[1]] = fit_params_wt_pip.pop(key)
-    
+
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     sampler = TPESampler(seed=seed_number)
     study = optuna.create_study(direction="maximize", sampler=sampler)
