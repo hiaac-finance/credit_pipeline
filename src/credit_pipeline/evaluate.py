@@ -1,10 +1,9 @@
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Any, Union
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import math
 from sklearn.metrics import (
-    confusion_matrix,
     balanced_accuracy_score,
     accuracy_score,
     precision_score,
@@ -15,80 +14,9 @@ from sklearn.metrics import (
 )
 
 
-# def plot_confusion_matrix(y_true, y_pred):
-#     """
-#     Compute and plot confusion matrix given true values and predictions.
-#     """
-#     # Compute confusion matrix
-#     cm = confusion_matrix(y_true, y_pred)
-
-#     print("Accuracy of the model is: ", accuracy_score(y_true, y_pred))
-
-#     # Plot confusion matrix
-#     sns.heatmap(cm, annot=True, cmap="Blues", fmt="g")
-#     plt.xlabel("Predicted")
-#     plt.ylabel("True")
-#     plt.show()
-
-
-def plot_prob_distribution(y_true, y_prob):
-    """
-    Compute and distributions of probs by target given true values and probabilities.
-    """
-    plt.hist(y_prob[y_true == 1], bins=20, alpha=0.5, label="1", density=True)
-    plt.hist(y_prob[y_true == 0], bins=20, alpha=0.5, label="0", density=True)
-    plt.xlabel("Predicted probability")
-    plt.ylabel("Frequency")
-    plt.legend(loc="upper center")
-    plt.show()
-
-
-def plot_prob_distribution_from_list(y_true, y_prob_list):
-    """
-    Compute and distributions of probs by target given
-    true values and a list of probabilities.
-    """
-    num_plots = len(y_prob_list)
-    num_cols = math.ceil(math.sqrt(num_plots))
-    num_rows = math.ceil(num_plots / num_cols)
-
-    fig, axs = plt.subplots(num_rows, num_cols, figsize=(12, 8))
-
-    for i, y_prob in enumerate(y_prob_list):
-        row = i // num_cols
-        col = i % num_cols
-
-        if num_rows == 1 and num_cols == 1:
-            axs.hist(y_prob[y_true == 1], bins=20, alpha=0.5, label="1", density=True)
-            axs.hist(y_prob[y_true == 0], bins=20, alpha=0.5, label="0", density=True)
-            axs.set_xlabel("Predicted probability")
-            axs.set_ylabel("Frequency")
-            axs.legend(loc="upper center")
-        else:
-            axs[row, col].hist(
-                y_prob[y_true == 1], bins=20, alpha=0.5, label="1", density=True
-            )
-            axs[row, col].hist(
-                y_prob[y_true == 0], bins=20, alpha=0.5, label="0", density=True
-            )
-            axs[row, col].set_xlabel("Predicted probability")
-            axs[row, col].set_ylabel("Frequency")
-            axs[row, col].legend(loc="upper center")
-
-    # Hide unused subplots
-    for i in range(len(y_prob_list), num_rows * num_cols):
-        row = i // num_cols
-        col = i % num_cols
-        if num_rows == 1 and num_cols == 1:
-            axs.axis("off")
-        else:
-            axs[row, col].axis("off")
-
-    plt.tight_layout()
-    plt.show()
-
-
-def false_positive_rate(y_true, y_pred):
+def false_positive_rate(
+    y_true: Union[np.ndarray, pd.Series], y_pred: Union[np.ndarray, pd.Series]
+) -> float:
     """Calculate false positive rate. The y_true and y_pred must be 0 or 1.
 
     Parameters
@@ -108,7 +36,11 @@ def false_positive_rate(y_true, y_pred):
     return fp / (fp + tn)
 
 
-def demographic_parity(y_true, y_pred, z):
+def demographic_parity(
+    y_true: Union[np.ndarray, pd.Series],
+    y_pred: Union[np.ndarray, pd.Series],
+    z: Union[np.ndarray, pd.Series],
+) -> float:
     """Calculate demographic parity. The y_true and y_pred must be 0 or 1, with 1 being the benefit class.
     Z is the sensitive attribute and also must be 0 or 1.
 
@@ -124,7 +56,11 @@ def demographic_parity(y_true, y_pred, z):
     return np.mean(y_pred[z == 1]) - np.mean(y_pred[z == 0])
 
 
-def equal_opportunity(y_true, y_pred, z):
+def equal_opportunity(
+    y_true: Union[np.ndarray, pd.Series],
+    y_pred: Union[np.ndarray, pd.Series],
+    z: Union[np.ndarray, pd.Series],
+):
     """Calculate equal opportunity. The y_true and y_pred must be 0 or 1, with 1 being the benefit class.
     Z is the sensitive attribute and also must be 0 or 1.
 
@@ -142,7 +78,11 @@ def equal_opportunity(y_true, y_pred, z):
     )
 
 
-def average_odds(y_true, y_pred, z):
+def average_odds(
+    y_true: Union[np.ndarray, pd.Series],
+    y_pred: Union[np.ndarray, pd.Series],
+    z: Union[np.ndarray, pd.Series],
+) -> float:
     """Calculate average odds fairness metric. The y_true and y_pred must be 0 or 1, with 1 being the benefit class.
     Z is the sensitive attribute and also must be 0 or 1.
 
@@ -162,7 +102,11 @@ def average_odds(y_true, y_pred, z):
     return 0.5 * (term1 + term2)
 
 
-def average_precision_value_difference(y_true, y_pred, z):
+def average_precision_value_difference(
+    y_true: Union[np.ndarray, pd.Series],
+    y_pred: Union[np.ndarray, pd.Series],
+    z: Union[np.ndarray, pd.Series],
+) -> float:
     """Calculate average precision value fairness metric. The y_true and y_pred must be 0 or 1, with 1 being the benefit class.
     Z is the sensitive attribute and also must be 0 or 1.
 
@@ -178,7 +122,11 @@ def average_precision_value_difference(y_true, y_pred, z):
     return average_odds(y_pred, y_true, z)  # Note that y_pred and y_true are swapped
 
 
-def geometric_mean_accuracy(y_true, y_pred, z):
+def geometric_mean_accuracy(
+    y_true: Union[np.ndarray, pd.Series],
+    y_pred: Union[np.ndarray, pd.Series],
+    z: Union[np.ndarray, pd.Series],
+) -> float:
     """Calculate geometric mean accuracy fairness metric. The y_true and y_pred must be 0 or 1, with 1 being the benefit class.
     Z is the sensitive attribute and also must be 0 or 1.
 
@@ -197,7 +145,11 @@ def geometric_mean_accuracy(y_true, y_pred, z):
     )
 
 
-def kickout(y_true, y_pred_base, y_pred_rej):
+def kickout(
+    y_true: Union[np.ndarray, pd.Series],
+    y_pred_base: Union[np.ndarray, pd.Series],
+    y_pred_rej: Union[np.ndarray, pd.Series],
+):
 
     # Wrong predictions by the base model
     wrong = (y_true == 1) & (y_pred_base == 0)
@@ -212,7 +164,7 @@ def kickout(y_true, y_pred_base, y_pred_rej):
     return kb - kg
 
 
-def create_eod_scorer(z, benefit_class=1):
+def create_eod_scorer(z: Union[np.ndarray, pd.Series], benefit_class: int = 1):
     """Create a scorer for equal opportunity difference. The scorer can be used in hyperparameter tuning.
 
     Parameters
@@ -231,7 +183,12 @@ def create_eod_scorer(z, benefit_class=1):
     return eod_scorer
 
 
-def create_fairness_scorer(fairness_goal, z, M=10, benefit_class=1):
+def create_fairness_scorer(
+    fairness_goal: float,
+    z: Union[np.ndarray, pd.Series],
+    M: int = 10,
+    benefit_class: int = 1,
+):
     """Create a scorer for fairness metrics. The scorer can be used in hyperparameter tuning.
 
     It will return the value of the roc auc if the fairness goal is reached, otherwise it will return a low value.
@@ -262,19 +219,30 @@ def create_fairness_scorer(fairness_goal, z, M=10, benefit_class=1):
     return fairness_scorer
 
 
-def get_metrics(name_model_dict, X, y, threshold=0.5):
+def get_metrics(
+    name_model_dict: Dict[str, Any],
+    X: Union[np.ndarray, pd.DataFrame],
+    y: Union[np.ndarray, pd.Series],
+    threshold: float = 0.5,
+) -> pd.DataFrame:
     """Calculate metrics for a set of models. The metrics are returned in a dataframe. The input must be a dict with model names, and the values can be a model or a tuple with model and threshold. If the threshold is not provided, the default value is 0.5.
 
-    :param name_model_dict:
-    :type name_model_dict: dict
-    :param X: model features
-    :type X: array-like
-    :param y: ground truth labels
-    :type y: array-like
-    :param threshold: threshold used in all models with model-specific threshold is not provided, defaults to 0.5
-    :type threshold: float, optional
-    :return: dataframe with columns as metrics and rows as models
-    :rtype: pandas.DataFrame
+
+    Parameters
+    ----------
+    name_model_dict : Dict[str, Any]
+        Dict with model names and values must be either the model or a list with the model and threshold
+    X : np.ndarray
+        Features matrix
+    y : np.ndarray
+        True labels
+    threshold : float, optional
+        Threshold to be used for all models, if individual thresholds are not provided, by default 0.5
+
+    Returns
+    -------
+    pd.DataFrame
+        Dataframe with metrics for each model.
     """
     models_dict = {}
     for name, model in name_model_dict.items():
@@ -285,7 +253,7 @@ def get_metrics(name_model_dict, X, y, threshold=0.5):
             model_ = model
             threshold_ = threshold
 
-        if hasattr(model[0], "predict_proba"):
+        if hasattr(model_, "predict_proba"):
             y_prob = model_.predict_proba(X)[:, 1]
             y_pred = (y_prob >= threshold_).astype("int")
         else:
@@ -329,7 +297,14 @@ def get_metrics(name_model_dict, X, y, threshold=0.5):
     return metrics
 
 
-def get_fairness_metrics(name_model_dict, X, y, z, threshold=0.5, benefit_class=1):
+def get_fairness_metrics(
+    name_model_dict: Dict[str, Any],
+    X: Union[pd.DataFrame, np.ndarray],
+    y: Union[pd.Series, np.ndarray],
+    z: Union[np.ndarray, pd.Series],
+    threshold: float = 0.5,
+    benefit_class: int = 1,
+):
     """Calculate fairness metrics for a set of models. The metrics are returned in a dataframe.
     The input must be a dict with model names, and the values are the model predictions.
 
@@ -347,6 +322,11 @@ def get_fairness_metrics(name_model_dict, X, y, z, threshold=0.5, benefit_class=
         Value that indicates the benefit class.
     threshold : float, optional
         Threshold to be used for all models, if individual thresholds are not provided, by default 0.5
+
+    Returns
+    -------
+    pd.DataFrame
+        Dataframe with fairness metrics for each model.
     """
     models_dict = {}
     for model_name, pred in name_model_dict.items():
@@ -423,7 +403,27 @@ def get_threshold_bad_rate(
     return y_probs[sorted_indices[max_valid_idx]]
 
 
-def get_reject_inference_metrics(name_model_dict : Dict[str, Tuple[np.array, np.array]], y : np.array, bad_rate : float = 0.5):
+def get_reject_inference_metrics(
+    name_model_dict: Dict[str, Tuple[np.array, np.array]],
+    y: np.array,
+    bad_rate: float = 0.5,
+):
+    """Calculate metrics for reject inference methods in comparison to a base model.
+
+    Parameters
+    ----------
+    name_model_dict : Dict[str, Tuple[np.array, np.array]]
+        Dict with model names as keys and tuples of (predicted probabilities for labeled data, predicted probabilities for unlabeled data) as values. The base model must be included in the dict with the key "base".
+    y : np.array
+        True labels.
+    bad_rate : float, optional
+        The maximum allowed false positive rate (bad rate), by default 0.5
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
     assert (
         "base" in name_model_dict
     ), "Base model must be provided in the input dict with key 'base'"

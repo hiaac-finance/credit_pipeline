@@ -7,6 +7,7 @@ def read_csv_encoded(path: str, filename: str) -> pd.DataFrame:
     """Reads a CSV file with automatic character encoding detection.
     Given a directory path and a filename, this function detects the character encoding of the file
     using the `chardet` library and reads the file into a pandas DataFrame.
+    
     Parameters
     ----------
     path : str
@@ -31,6 +32,7 @@ def read_csv_encoded(path: str, filename: str) -> pd.DataFrame:
 
 
 def download_datasets():
+    """Function to download the datasets from Google Drive."""
     import gdown
 
     """Download data from Google Drive and unzip it in the data folder."""
@@ -42,8 +44,13 @@ def download_datasets():
 
 
 def prepare_datasets(data_path : str ="data"):
-    """
-    Function that preprocess the datasets and save them in the data/prepared folder.
+    """Function that preprocess the datasets and save them in the data/prepared folder.
+
+
+    Parameters
+    ----------
+    data_path : str, optional
+        Root folder of data files, by default "data"
     """
     if Path.cwd().name != "scripts":
         data_path = "../data"
@@ -233,11 +240,17 @@ def prepare_datasets(data_path : str ="data"):
 
 
 def load_dataset(dataset_name : str) -> pd.DataFrame:
-    """Function to load the prepared datasets, includes
-    Home Credit, Taiwan and German.
+    """Function to load the prepared datasets, includes Home Credit, Taiwan and German.
 
-    :param dataset_name: string, name of the dataset
-    :return: pandas dataframe
+    Parameters
+    ----------
+    dataset_name : str
+        Name of the dataset to load, should be one of "homecredit", "taiwan" or "german".
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing the data from the specified dataset. Categorical columns are converted to pandas Categorical dtype.
     """
     if dataset_name == "homecredit":
         df = pd.read_csv("../data/prepared/homecredit.csv")

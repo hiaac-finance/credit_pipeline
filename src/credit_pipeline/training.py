@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Tuple, List, Dict, Any, Union, Callable
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold, train_test_split
@@ -78,10 +78,33 @@ class EBE(
     BaseEstimator,
     TransformerMixin,
 ):
+    """Encoder for Binary Encoding (EBE) transform categorical features into numeric features by replacing each category with the mean of the target variable for that category.
+    The transformation is smoothed by adding a global mean to the numerator and a constant k to the denominator, which helps to prevent overfitting, especially for categories with few samples.
+
+    Parameters
+    ----------
+    k : int, optional
+        Smoothing parameter, by default 1
+    """
+
     def __init__(self, k: int = 1):
         self.k = k
 
     def fit(self, X: pd.DataFrame, y: pd.Series) -> "EBE":
+        """Calculate mean values for categorical features to be used on encoding.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            DataFrame of features to be encoded, must be categorical.
+        y : pd.Series
+            Series of target values.
+
+        Returns
+        -------
+        EBE
+            The fitted encoder object.
+        """
         self.feature_names_in_ = []
         self.n_features, self.n_items = X.shape[1], X.shape[0]
         self._aux_dict_main = {}
@@ -98,74 +121,80 @@ class EBE(
             self.mean[X_name] = y.mean()
         return self
 
-    def transform(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> np.ndarray:
+    def transform(self, X: pd.DataFrame, y : Optional[pd.Series] = None) -> np.ndarray:
+        """Transform X based on provided y, or uses values calculated in the fitting call.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            DataFrame of features to be encoded, must be categorical.
+        y : Optional[pd.Series], optional
+            Series of target values, by default None
+
+        Returns
+        -------
+        np.ndarray
+            Transformed feature matrix
+        """
         Xt_list = []
-        for i in range(self.n_features):
-            Xi = X.iloc[:, i]
-            X_name = X.iloc[:, i].name
-            X_copy = Xi.copy()
-            mean = self._aux_dict_main[X_name]["mean"]
-            count = self._aux_dict_main[X_name]["count"]
+        for X_name in self.feature_names_in_:
+            Xi = X[X_name].copy()
+            
+            # Extract fitted parameters
+            means_dict = self._aux_dict_main[X_name]["mean"]
+            counts_dict = self._aux_dict_main[X_name]["count"]
+            global_mean = self.mean[X_name]
+            
+            # Handle unknown categories (those not seen during fit)
+            # Using the mode of the means as your default fallback
+            default_mean = pd.Series(list(means_dict.values())).mode()[0]
+            
+            # 1. Map categories to their mean and count
+            # .map() is more efficient than .replace() for large dicts
+            group_ave = Xi.map(means_dict).fillna(default_mean).astype(float)
+            group_count = Xi.map(counts_dict).fillna(0).astype(float)
 
-            mode = pd.Series(mean.values()).mode()[0]
-            fit_unique = set(self.unique_values[X_name])
-            X_unique = set(Xi.unique())
-            unknown_values = list(X_unique - fit_unique)
-            X_copy = X_copy.replace(unknown_values, mode)
-
-            group_ave = X_copy.replace(mean)
-            group_count = X_copy.replace(count)
-
+            # 2. Apply the smoothing formula
+            # Formula: (mean * count + k * global_mean) / (count + k)
             Xt = (
-                (group_ave * group_count + self.k * self.mean[X_name])
-                / (self.k + group_count)
-            ).values.reshape(-1, 1)
-            Xt_list.append(Xt)
-        Xt_array = np.hstack(Xt_list)
-        return Xt_array
+                (group_ave * group_count + self.k * global_mean)
+                / (group_count + self.k)
+            )
+            
+            Xt_list.append(Xt.values.reshape(-1, 1))
+            
+        return np.hstack(Xt_list)
 
     def get_feature_names_out(
-        self, input_features: Tuple[pd.DataFrame, List]
+        self, input_features: Union[pd.DataFrame, List]
     ) -> List[str]:
+        """Helper for Sklearn pipeline.
+
+        Parameters
+        ----------
+        input_features : Union[pd.DataFrame, List]
+            The input features, can be a DataFrame or a list of feature names.
+
+        Returns
+        -------
+        List[str]
+            List of feature names after transformation.
+        """
         if isinstance(input_features, pd.DataFrame):
             return [col for col in input_features.columns]
         else:
             return [col for col in input_features]
 
 
-def columns_by_type(dataframe, types_cols=["numeric"], debug=False):
-    list_cols = []
-    if types_cols == ["numeric"]:
-        types_cols = ["b", "i", "u", "f", "c"]
-    elif types_cols == ["categorical"]:
-        types_cols = ["O", "S", "U"]
-
-    # Iterate through each column in the DataFrame
-    for c in dataframe.columns:
-        col = dataframe[c]
-
-        # Check if the column's data type matches any of the specified data types
-        if (col.dtype.kind in types_cols) or (col.dtype in types_cols):
-            list_cols.append(c)
-
-            # Print debugging information if debug flag is enabled
-            if debug:
-                print(c, " : ", col.dtype)
-                print(col.unique()[:10])
-                print("---------------")
-
-    return list_cols
-
-
 def create_pipeline(
-    X : pd.DataFrame,
-    y : pd.Series,
-    classifier : Optional[BaseEstimator] = None,
-    cat_cols : Tuple[str, List[str]] = "infer",
-    onehot : bool =True,
-    onehotdrop : bool =False,
-    normalize : bool =True,
-    do_EBE : bool =True,
+    X: pd.DataFrame,
+    y: pd.Series,
+    classifier: Optional[BaseEstimator] = None,
+    cat_cols: Union[str, List[str]] = "infer",
+    onehot: bool = True,
+    onehotdrop: bool = False,
+    normalize: bool = True,
+    do_EBE: bool = True,
     crit: int = 3,
 ):
     """Creates a machine learning pipeline that includes preprocessing steps and a classifier. The pipeline is designed to handle both numeric and categorical features, with options for filling missing values, encoding categorical variables, normalizing numeric features, and applying a specified classifier.
@@ -178,7 +207,7 @@ def create_pipeline(
         Target variable, must be binary.
     classifier : Optional[BaseEstimator], optional
         Scikit-learn classifier, by default None
-    cat_cols : Tuple[str, List[str]], optional
+    cat_cols : Union[str, List[str]], optional
         Categorical columns, by default "infer"
     onehot : bool, optional
         Whether to use one-hot encoding, by default True
@@ -315,18 +344,18 @@ def create_pipeline(
 
 
 def objective(
-    trial,
-    model_class,
-    pipeline_params,
-    fit_params,
-    score_func,
-    param_space,
-    X_train,
-    y_train,
-    X_val,
-    y_val,
-    cv,
-    seed_number,
+    trial: optuna.trial.Trial,
+    model_class: BaseEstimator,
+    pipeline_params: Dict[str, Any],
+    fit_params: Dict[str, Any],
+    score_func: Union[str, Callable],
+    param_space: Dict[str, Dict[str, Any]],
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    X_val: pd.DataFrame,
+    y_val: pd.Series,
+    cv: int,
+    seed_number: int,
 ):
     """Objective function for optimizing machine learning models using Optuna. This function serves as the objective for an Optuna study, aiming to find the best hyperparameters
     for a machine learning model from a given parameter space. It initializes the model with hyperparameters
@@ -412,21 +441,21 @@ def objective(
 
 
 def optimize_model(
-    model_class,
-    param_space,
-    X_train,
-    y_train,
-    X_val=None,
-    y_val=None,
-    cv=5,
-    pipeline_params={},
-    fit_params={},
-    score_func="roc_auc",
-    n_trials=None,
-    timeout=None,
-    seed_number=None,
-    n_jobs=1,
-):
+    model_class: BaseEstimator,
+    param_space: Dict[str, Dict[str, Any]],
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    X_val: pd.DataFrame = None,
+    y_val: pd.Series = None,
+    cv: int = 5,
+    pipeline_params: Dict[str, Any] = {},
+    fit_params: Dict[str, Any] = {},
+    score_func: str = "roc_auc",
+    n_trials: int = None,
+    timeout: int = None,
+    seed_number: int = None,
+    n_jobs: int = 1,
+) -> Tuple[Dict[str, Any], Pipeline]:
     """Optimize hyperparameters of a machine learning model using Optuna.
     This function creates an Optuna study to search for the best hyperparameters for a given machine learning model from a specified parameter space. The objective of the study is to maximize the ROC score of the model on the validation score. It can work with a provided validation set or with cross-validation.
     Parameter spaces for LogisticRegression, RandomForestClassifier, LGBMClassifier, and MLPClassifier are provided by default. For any model, a custom parameter space can be provided.
@@ -460,10 +489,12 @@ def optimize_model(
         Number of seconds
     seed_number: int, default=None
         Random seed number.
+    n_jobs: int, default=1
+        Number of parallel jobs to run for the optimization.
 
     Returns
     -------
-    (optuna.study.Study, sklearn.pipeline.Pipeline) - study and model
+    (dict, sklearn.pipeline.Pipeline) - best parameters and trained model
     """
     if param_space == "suggest":
         if model_class.__name__ in hyperparam_spaces.keys():
@@ -504,24 +535,24 @@ def optimize_model(
         **pipeline_params,
     )
     model.fit(X_train, y_train)
-    return study, model
+    return best_params, model
 
 
 def optimize_model_fast(
-    model_class,
-    param_space,
-    X_train,
-    y_train,
-    X_val,
-    y_val,
-    pipeline_params={},
-    fit_params={},
-    score_func="roc_auc",
-    n_trials=None,
-    timeout=None,
-    seed_number=None,
+    model_class: BaseEstimator,
+    param_space: Dict[str, Dict[str, Any]],
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    X_val: pd.DataFrame,
+    y_val: pd.Series,
+    pipeline_params: Dict[str, Any] = {},
+    fit_params: Dict[str, Any] = {},
+    score_func: str = "roc_auc",
+    n_trials: int = None,
+    timeout: int = None,
+    seed_number: int = None,
     n_jobs=1,
-):
+) -> Tuple[Dict[str, Any], Pipeline]:
     """Optimize hyperparameters of a machine learning model (with Scikit API) using Optuna.
     This is a faster version of the optimization as it only fits the final model, and not the complete pipeline.
     The objective is to maximize the metric "score_func" at the validation dataset. "score_func" must be the string "roc_auc" or a function that will be called with validation prediction.
@@ -557,7 +588,7 @@ def optimize_model_fast(
 
     Returns
     -------
-    (optuna.study.Study, sklearn.pipeline.Pipeline) - study and model
+    (dict, sklearn.pipeline.Pipeline) - best parameters and trained model
     """
 
     def objective_fast_(
@@ -667,37 +698,26 @@ def optimize_model_fast(
         )
         model.fit(X_train, y_train, **fit_params)
 
-    return study, model
+    return best_params, model
 
 
-def ks_threshold(y_true, y_score):
-    """Identify the threshold that maximizes the Kolmogorov-Smirnov statistic."""
+def ks_threshold(
+    y_true: Union[np.ndarray, pd.Series], y_score: Union[np.ndarray, pd.Series]
+) -> float:
+    """Identify the threshold that maximizes the Kolmogorov-Smirnov statistic.
+
+    Parameters
+    ----------
+    y_true : Union[np.ndarray, pd.Series]
+        Series with target values.
+    y_score : Union[np.ndarray, pd.Series]
+        Predicted scores.
+
+    Returns
+    -------
+    float
+        Threshold that maximizes the Kolmogorov-Smirnov statistic.
+    """
     fpr, tpr, thresholds = roc_curve(y_true, y_score)
     opt_threshold = thresholds[np.argmax(tpr - fpr)]
     return opt_threshold
-
-
-def create_train_test(dataset, final=False, seed=880, dev_test_size=0.2):
-    """Splits a dataset betweeen a train set and development or deployment test.
-
-    Parameters:
-    - dataset (DataFrame or array-like): The dataset to be split into train and test sets.
-    - final (bool): If True, indicates that the holdout test will be.
-                    If False, indicates that the development test will be returned (default: False).
-    - seed (int): Seed value for random state for development test (default: 880).
-    - dev_test_size (float): The proportion of the dataset to include in the development
-    test split (default: 0.2).
-
-    Returns:
-    - Tuple: (train_set, test_set) - The training and testing datasets.
-
-    """
-    # Do not change the following parameters neither the value of final to avoid data leakage
-    train, holdout = train_test_split(dataset, test_size=0.2, random_state=880)
-    if final:
-        return train, holdout
-    else:
-        dev_train, dev_test = train_test_split(
-            train, test_size=dev_test_size, random_state=seed
-        )
-        return dev_train, dev_test
