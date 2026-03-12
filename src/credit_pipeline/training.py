@@ -7,7 +7,6 @@ from sklearn.impute import SimpleImputer
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer, make_column_selector
 from sklearn.pipeline import Pipeline
-from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import (
     StandardScaler,
     OneHotEncoder,
@@ -75,8 +74,8 @@ hyperparam_spaces = {
 
 
 class EBE(
-    BaseEstimator,
     TransformerMixin,
+    BaseEstimator,
 ):
     """Encoder for Binary Encoding (EBE) transform categorical features into numeric features by replacing each category with the mean of the target variable for that category.
     The transformation is smoothed by adding a global mean to the numerator and a constant k to the denominator, which helps to prevent overfitting, especially for categories with few samples.
