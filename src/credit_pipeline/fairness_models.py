@@ -7,7 +7,7 @@ from .evaluate import demographic_parity, equal_opportunity
 from fairgbm import FairGBMClassifier
 
 
-class FairModel(BaseEstimator, ClassifierMixin):
+class FairModel(ClassifierMixin, BaseEstimator):
     """
     Base class for fairness-aware models.
     """

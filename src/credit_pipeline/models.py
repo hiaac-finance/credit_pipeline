@@ -9,7 +9,7 @@ from keras.optimizers import Adam
 from sklearn.base import BaseEstimator, ClassifierMixin
 
 
-class MLPClassifier(BaseEstimator, ClassifierMixin):
+class MLPClassifier(ClassifierMixin, BaseEstimator):
     """MLPClassifier in the Sklearn API using Keras.
     It mimics the MLPClassifier from Sklearn, but it uses Keras to train the model.
     The extra functionalities are the the possibility to use class weights and sample weights.
