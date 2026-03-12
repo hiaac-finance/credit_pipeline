@@ -9,7 +9,7 @@
 - reject inference methods, and
 - model explainability and counterfactual analysis.
 
-The repository accompanies research on responsible machine learning for credit scoring and provides reusable code for experiments on German Credit, Taiwan, and Home Credit datasets.
+The repository accompanies research on responsible machine learning for credit scoring and provides reusable code for experiments on German Credit, Taiwan, and Home Credit datasets. To see the original version that accompanied the paper, see the branch `ncaa_experiments`.
 
 ## What is included
 
