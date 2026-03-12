@@ -33,6 +33,11 @@ dependencies = [
     "matplotlib",
     "gdown",
     "chardet",
+    "shap",
+    "lime",
+    "dice-ml",
+    "cfmining",
+    "xxhash",
 ]
 
 [project.urls]
