@@ -1,8 +1,10 @@
+from typing import List, Union, Dict, Tuple, Optional, Any
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.inspection import partial_dependence
-from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
+from sklearn.pipeline import Pipeline
 from lime import lime_tabular
 import shap
 import cfmining.algorithms as alg
@@ -25,13 +27,15 @@ class PartialDependencePipeline:
         Option to set between PDP and ICE, use "average" if wants to calculate PDP otherwise use "individual", by default "average"
     """
 
-    def __init__(self, pipeline, grid_resolution=20, kind="average"):
+    def __init__(
+        self, pipeline: Pipeline, grid_resolution: int = 20, kind: str = "average"
+    ):
         self.preprocess = pipeline[:-1]
         self.model = pipeline[-1]
         self.grid_resolution = grid_resolution
         self.kind = kind
 
-        class ModelWrapper(BaseEstimator, ClassifierMixin):
+        class ModelWrapper(RegressorMixin, BaseEstimator):
             def __init__(self, model):
                 super().__init__()
                 self.model = model
@@ -46,9 +50,12 @@ class PartialDependencePipeline:
             def predict_proba(self, X):
                 return self.model.predict_proba(X)[:, 1]
 
+            def __sklearn_is_fitted__(self):
+                return True
+
         self.model_wrapper = ModelWrapper(self.model)
 
-    def __call__(self, X, features):
+    def __call__(self, X: pd.DataFrame, features: List[str]) -> Dict[str, Any]:
         """Calculates the Partial Dependence or Individual Conditional Expectation for a given feature.
 
         Parameters
@@ -74,11 +81,12 @@ class PartialDependencePipeline:
             percentiles=(0.05, 0.95),
             method="brute",
         )
+        importance["values"] = importance["grid_values"]
 
         # get deciles for the feature
         deciles = []
         for feature in features:
-            deciles.append(np.percentile(X_preprocess[feature], np.arange(4, 96, 2)))
+            deciles.append(np.percentile(X_preprocess[feature], np.arange(4, 94, 2)))
 
         # transform back to original scale
         for i, feature in enumerate(features):
@@ -114,7 +122,11 @@ class ShapPipelineExplainer:
     """
 
     def __init__(
-        self, pipeline, background_samples, method_explain="prob", threshold=0.5
+        self,
+        pipeline: Pipeline,
+        background_samples: pd.DataFrame,
+        method_explain: str = "prob",
+        threshold: float = 0.5,
     ):
         self.method_explain = method_explain
         self.threshold = threshold
@@ -130,6 +142,9 @@ class ShapPipelineExplainer:
             dict(enumerate(x))
             for x in self.preprocess[1].transformers_[2][1].unique_values.values()
         ]
+        for i in range(len(self.categories_mapping)):
+            for key, value in self.categories_mapping[i].items():
+                self.categories_mapping[i][key] = str(value)
         X_preprocess = self.preprocess.transform(background_samples)
         self.feature_names = X_preprocess.columns.tolist()
 
@@ -144,7 +159,7 @@ class ShapPipelineExplainer:
             algorithm="permutation",
         )
 
-    def __call__(self, X):
+    def __call__(self, X: pd.DataFrame) -> pd.DataFrame:
         """Calculates the shapley values for the given input.
 
         Parameters
@@ -164,7 +179,7 @@ class ShapPipelineExplainer:
             explanation_dict[feature_name] = shap_values[:, i]
         return pd.DataFrame(explanation_dict)[self.feature_names]
 
-    def plot_explanation(self, X):
+    def plot_explanation(self, X: pd.DataFrame):
         def filter_columns(importances, top_k=5):
             if len(importances) == 1:
                 v = np.abs(importances.values[0])
@@ -271,7 +286,11 @@ class ShapPipelineExplainer:
 
 class LimePipelineExplainer:
     def __init__(
-        self, pipeline, background_samples, method_explain="prob", threshold=0.5
+        self,
+        pipeline: Pipeline,
+        background_samples: pd.DataFrame,
+        method_explain: str = "prob",
+        threshold: float = 0.5,
     ):
         self.method_explain = method_explain
         self.threshold = threshold
@@ -304,6 +323,13 @@ class LimePipelineExplainer:
                     .copy()
                 )
 
+        print(self.categories_mapping)
+        # print(self.categories_mapping)
+        # print("q")
+        # # transform caterogies_mapping to string values
+        for key, value in self.categories_mapping.items():
+            self.categories_mapping[key] = [str(v) for v in value]
+
         self.explainer = lime_tabular.LimeTabularExplainer(
             X_preprocess.values,
             feature_names=self.feature_names,
@@ -314,7 +340,7 @@ class LimePipelineExplainer:
             discretize_continuous=False,
         )
 
-    def __call__(self, X):
+    def __call__(self, X: pd.DataFrame) -> pd.DataFrame:
 
         def pred_fn(X):
             # transform X back to a dataframe
@@ -340,7 +366,7 @@ class LimePipelineExplainer:
                 explanation_dict[f][i] = v
         return pd.DataFrame(explanation_dict)
 
-    def explain_instance(self, X):
+    def explain_instance(self, X: pd.DataFrame):
 
         def pred_fn(X):
             # transform X back to a dataframe
@@ -356,7 +382,7 @@ class LimePipelineExplainer:
         )
         return explanation
 
-    def plot_explanation(self, X):
+    def plot_explanation(self, X: pd.DataFrame):
         def filter_columns(importances, top_k=5):
             if len(importances) == 1:
                 v = np.abs(importances.values[0])
@@ -429,6 +455,7 @@ class LimePipelineExplainer:
                 sigma = scaler.scale_[idx]
                 values[i] = values[i] * sigma + mu
 
+        print(self.categories_mapping)
         # return categorical features to string values
         for i, feature in enumerate(important_features):
             if feature in self.categoric_features:
@@ -486,14 +513,14 @@ class MAPOCAM:
 
     def __init__(
         self,
-        pipeline,
-        X,
-        mutable_features,
-        target,
-        max_changes=3,
-        criteria="percentile",
-        step_size=0.01,
-        threshold=0.5,
+        pipeline: Pipeline,
+        X: pd.DataFrame,
+        mutable_features: List[str],
+        target: int,
+        max_changes: int = 3,
+        criteria: str = "percentile",
+        step_size: float = 0.01,
+        threshold: float = 0.5,
     ):
         class HelperClassifier:
             def __init__(
@@ -589,7 +616,7 @@ class MAPOCAM:
             )
         self.max_changes = max_changes
 
-    def fit(self, individual):
+    def fit(self, individual: Union[np.ndarray, pd.DataFrame]) -> List[np.ndarray]:
         individual_ = self.preprocess.transform(individual).values.flatten()
         method = alg.MAPOCAM(
             self.action_set,
@@ -622,7 +649,15 @@ class Dice:
         Parameter, weight for sparsity in optimization problem
     """
 
-    def __init__(self, X, Y, pipeline, n_cfs, mutable_features, sparsity_weight=0.2):
+    def __init__(
+        self,
+        X: pd.DataFrame,
+        Y: Union[np.ndarray, pd.Series],
+        pipeline: Pipeline,
+        n_cfs: int,
+        mutable_features: List[str],
+        sparsity_weight: float = 0.2,
+    ):
         self.total_CFs = n_cfs
         self.sparsity_weight = sparsity_weight
         self.mutable_features = mutable_features
@@ -647,9 +682,9 @@ class Dice:
             continuous_features=self.continuous_features,
             outcome_name="target",
         )
-        self.exp = dice_ml.Dice(dice_data, dice_model)
+        self.exp = dice_ml.Dice(dice_data, dice_model, method = "genetic")
 
-    def fit(self, individual):
+    def fit(self, individual: Union[np.ndarray, pd.DataFrame]) -> List[np.ndarray]:
         if type(individual) == np.ndarray:
             individual = pd.DataFrame(data=[individual], columns=self.features)
         individual_ = self.preprocess.transform(individual)
@@ -668,7 +703,12 @@ class Dice:
         return solutions
 
 
-def display_cfs(individual, cfs, pipeline, show_change=False):
+def display_cfs(
+    individual: pd.DataFrame,
+    cfs: List[np.ndarray],
+    pipeline: Pipeline,
+    show_change: bool = False,
+) -> pd.DataFrame:
     """Display the counterfactuals generated by the explainer.
 
     Parameters
@@ -731,12 +771,14 @@ def display_cfs(individual, cfs, pipeline, show_change=False):
     df["n_changes"] = n_changes
     df = df.sort_values("n_changes", ascending=True)
     df = df.drop(columns="n_changes")
-
+    # trasnform all columns to object
+    for col in df.columns:
+        df[col] = df[col].astype(str)
     for i in range(1, len(cfs) + 1):
         for col in altered_columns:
             # check if the change is equal to 0
             change = df[col + "_"].iloc[i]
-            if change == 0:
+            if change == "0":
                 df[col].iloc[i] = "---"
 
     return df[altered_columns].T

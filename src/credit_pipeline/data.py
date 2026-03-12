@@ -1,11 +1,40 @@
 import os
 from pathlib import Path
 import pandas as pd
-import credit_pipeline.data_exploration as dex
+
+
+def read_csv_encoded(path: str, filename: str) -> pd.DataFrame:
+    """Reads a CSV file with automatic character encoding detection.
+    Given a directory path and a filename, this function detects the character encoding of the file
+    using the `chardet` library and reads the file into a pandas DataFrame.
+    
+    Parameters
+    ----------
+    path : str
+        The directory path where the file is located.
+    filename : str
+        The name of the file to be read.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing the data from the CSV file.
+    """
+    the_file = os.path.join(path, filename)
+    try:
+        data = pd.read_csv(the_file, index_col=False)
+    except:
+        rawdata = open(the_file, "rb").read()
+        result = chardet.detect(rawdata)
+        charenc = result["encoding"]
+        data = pd.read_csv(the_file, encoding=charenc, index_col=False)
+    return data
 
 
 def download_datasets():
+    """Function to download the datasets from Google Drive."""
     import gdown
+
     """Download data from Google Drive and unzip it in the data folder."""
     url = "https://drive.google.com/uc?id=1Y7bTNsxDv-te40FnJsoca1YeB4da6TCq"
     output = "data.zip"
@@ -14,16 +43,23 @@ def download_datasets():
     os.system("rm data.zip")
 
 
-def prepare_datasets(data_path="data"):
-    """
-    Function that preprocess the datasets and save them in the data/prepared folder.
+def prepare_datasets(data_path : str ="data"):
+    """Function that preprocess the datasets and save them in the data/prepared folder.
+
+
+    Parameters
+    ----------
+    data_path : str, optional
+        Root folder of data files, by default "data"
     """
     if Path.cwd().name != "scripts":
-        data_path = '../data'
+        data_path = "../data"
     # make dir if not exist
     os.makedirs(os.path.join(data_path, "prepared"), exist_ok=True)
     # home credit
-    df = dex.read_csv_encoded(os.path.join(data_path, "HomeCredit"), "application_train.csv")
+    df = read_csv_encoded(
+        os.path.join(data_path, "HomeCredit"), "application_train.csv"
+    )
     df = df.drop(columns=["SK_ID_CURR", "OCCUPATION_TYPE", "ORGANIZATION_TYPE"])
     df = df.rename(columns={"TARGET": "DEFAULT"})
     cat_cols = df.loc[:, df.dtypes == "object"].columns.tolist()
@@ -32,7 +68,7 @@ def prepare_datasets(data_path="data"):
     df.to_csv(os.path.join(data_path, "prepared/homecredit.csv"), index=False)
 
     # taiwan
-    df = dex.read_csv_encoded(os.path.join(data_path, "Taiwan"), "Taiwan.csv")
+    df = read_csv_encoded(os.path.join(data_path, "Taiwan"), "Taiwan.csv")
     df.columns = df.iloc[0, :].tolist()
     df = df.iloc[1:, :]
     df = df.drop(columns=["ID"])
@@ -75,7 +111,7 @@ def prepare_datasets(data_path="data"):
     df.to_csv(os.path.join(data_path, "prepared/taiwan.csv"), index=False)
 
     # german
-    df = dex.read_csv_encoded(os.path.join(data_path, "German"), "german.csv")
+    df = read_csv_encoded(os.path.join(data_path, "German"), "german.csv")
     df.columns = [
         "CheckingAccount",
         "Duration",
@@ -203,12 +239,18 @@ def prepare_datasets(data_path="data"):
     df.to_csv(os.path.join(data_path, "prepared/german.csv"), index=False)
 
 
-def load_dataset(dataset_name):
-    """Function to load the prepared datasets, includes
-    Home Credit, Taiwan and German.
+def load_dataset(dataset_name : str) -> pd.DataFrame:
+    """Function to load the prepared datasets, includes Home Credit, Taiwan and German.
 
-    :param dataset_name: string, name of the dataset
-    :return: pandas dataframe
+    Parameters
+    ----------
+    dataset_name : str
+        Name of the dataset to load, should be one of "homecredit", "taiwan" or "german".
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame containing the data from the specified dataset. Categorical columns are converted to pandas Categorical dtype.
     """
     if dataset_name == "homecredit":
         df = pd.read_csv("../data/prepared/homecredit.csv")

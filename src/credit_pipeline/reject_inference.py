@@ -5,14 +5,23 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.semi_supervised import LabelSpreading
 
 
-class RejectInference(BaseEstimator, ClassifierMixin):
+class RejectInference(ClassifierMixin, BaseEstimator):
     """
-    Base class for the implementation of Reject Inference methods
+    Base class for the implementation of Reject Inference methods.
     """
 
     def __init__(self, base_estimator: BaseEstimator, reject_estimator: BaseEstimator):
         self.base_estimator = base_estimator
         self.reject_estimator = reject_estimator
+
+    def _wrap(self, X: np.ndarray) -> Union[np.ndarray, pd.DataFrame]:
+        """
+        Helper method to wrap a numpy array back into a pandas DataFrame 
+        if feature names were provided during fit.
+        """
+        if getattr(self, "feature_names_in_", None) is not None:
+            return pd.DataFrame(X, columns=self.feature_names_in_)
+        return X
 
     def fit(
         self,
@@ -37,18 +46,25 @@ class RejectInference(BaseEstimator, ClassifierMixin):
         RejectInference
             The fitted RejectInference object.
         """
-        if isinstance(X, pd.DataFrame):
-            X = X.values
-        if isinstance(y, pd.Series):
-            y = y.values
+        # Store feature names to prevent LightGBM/Scikit-Learn warnings
+        self.feature_names_in_ = X.columns.to_numpy() if isinstance(X, pd.DataFrame) else None
+
+        # Extract underlying arrays for fast, warning-free internal slicing
+        X_arr = X.values if isinstance(X, pd.DataFrame) else X
+        y_arr = y.values if isinstance(y, pd.Series) else y
+
         self.classes_ = np.unique(
-            y[y != -1]
+            y_arr[y_arr != -1]
         )  # only consider the classes in the labeled data
-        X_unl = X[y == -1]
-        X = X[y != -1]
-        y = y[y != -1]
-        X_updated, y_updated, sample_weights = self._preprocess(X, y, X_unl)
-        self.base_estimator.fit(X_updated, y_updated, sample_weight=sample_weights)
+        
+        X_unl = X_arr[y_arr == -1]
+        X_lab = X_arr[y_arr != -1]
+        y_lab = y_arr[y_arr != -1]
+        
+        X_updated, y_updated, sample_weights = self._preprocess(X_lab, y_lab, X_unl)
+        
+        # Re-wrap into DataFrame before final fit
+        self.base_estimator.fit(self._wrap(X_updated), y_updated, sample_weight=sample_weights)
         return self
 
     def predict_proba(self, X: Union[np.ndarray, pd.DataFrame]) -> np.ndarray:
@@ -64,8 +80,6 @@ class RejectInference(BaseEstimator, ClassifierMixin):
         np.ndarray
             Predicted probabilities.
         """
-        if isinstance(X, pd.DataFrame):
-            X = X.values
         return self.base_estimator.predict_proba(X)
 
     def predict(self, X: Union[np.ndarray, pd.DataFrame]) -> np.ndarray:
@@ -81,8 +95,6 @@ class RejectInference(BaseEstimator, ClassifierMixin):
         np.ndarray
             Predicted labels.
         """
-        if isinstance(X, pd.DataFrame):
-            X = X.values
         return self.base_estimator.predict(X)
 
     def _preprocess(
@@ -95,6 +107,14 @@ class RejectInference(BaseEstimator, ClassifierMixin):
 
 
 class RejectUpward(RejectInference):
+    """
+    Upward Augmentation strategy for reject inference.
+    
+    This strategy adjusts the weights of accepted applicants to represent the 
+    rejected population. In the upward approach, the weights of the accepted 
+    clients are updated to be indirectly proportional to the chances of a 
+    client being accepted.
+    """
     def _preprocess(
         self,
         X: np.ndarray,
@@ -107,17 +127,27 @@ class RejectUpward(RejectInference):
         # shuffle data
         indices = np.arange(X_concat.shape[0])
         np.random.shuffle(indices)
-        self.reject_estimator.fit(X_concat[indices], y_concat[indices])
+        
+        # Wrap before fitting reject_estimator
+        self.reject_estimator.fit(self._wrap(X_concat[indices]), y_concat[indices])
 
-        sample_weights = self.reject_estimator.predict_proba(X)[
+        sample_weights = self.reject_estimator.predict_proba(self._wrap(X))[
             :, 1
         ]  # probability of being accepted
         sample_weights = 1 / sample_weights  # upweighting the accepted samples
-
+        
         return X, y, sample_weights
 
 
 class RejectDownward(RejectInference):
+    """
+    Downward Augmentation strategy for reject inference.
+    
+    This strategy adjusts the weights of accepted applicants to represent the 
+    rejected population. In the downward approach, the weights of the accepted 
+    clients are updated to be directly proportional to the chances of a client 
+    being rejected.
+    """
     def _preprocess(
         self,
         X: np.ndarray,
@@ -130,9 +160,11 @@ class RejectDownward(RejectInference):
         # shuffle data
         indices = np.arange(X_concat.shape[0])
         np.random.shuffle(indices)
-        self.reject_estimator.fit(X_concat[indices], y_concat[indices])
+        
+        # Wrap before fitting
+        self.reject_estimator.fit(self._wrap(X_concat[indices]), y_concat[indices])
 
-        sample_weights = self.reject_estimator.predict_proba(X)[
+        sample_weights = self.reject_estimator.predict_proba(self._wrap(X))[
             :, 1
         ]  # probability of being accepted
         sample_weights = 1 - sample_weights
@@ -141,6 +173,14 @@ class RejectDownward(RejectInference):
 
 
 class RejectSoftCutoff(RejectInference):
+    """
+    Soft Cut-off Augmentation strategy for reject inference.
+    
+    This variation of augmentation adjusts the weights of accepted samples based 
+    on a score of the group that the sample was placed in. For each group, the 
+    augmentation factor is inversely proportional to the probability of a sample 
+    in that group being from an accepted client.
+    """
     def _preprocess(
         self,
         X: np.ndarray,
@@ -153,9 +193,11 @@ class RejectSoftCutoff(RejectInference):
         # shuffle data
         indices = np.arange(X_concat.shape[0])
         np.random.shuffle(indices)
-        self.reject_estimator.fit(X_concat[indices], y_concat[indices])
+        
+        # Wrap before fitting
+        self.reject_estimator.fit(self._wrap(X_concat[indices]), y_concat[indices])
 
-        prob_accept = self.reject_estimator.predict_proba(X_concat)[:, 1]
+        prob_accept = self.reject_estimator.predict_proba(self._wrap(X_concat))[:, 1]
         intervals = np.percentile(prob_accept, np.linspace(0, 100, num=100))
         sample_weights = np.ones(X_concat.shape[0])
         for i in range(len(intervals) - 1):
@@ -174,14 +216,24 @@ class RejectSoftCutoff(RejectInference):
 
 
 class FuzzyParcelling(RejectInference):
+    """
+    Fuzzy-Parcelling strategy for reject inference.
+    
+    A variation of augmentation where rejected samples are duplicated. Half are 
+    labeled as bad payers and the other half as good payers. The half labeled 
+    as good receives a weight equal to the probability of being accepted, while 
+    the half labeled as bad receives a weight equal to the probability of being 
+    rejected. The weight of the accepted samples remains one.
+    """
     def _preprocess(
         self,
         X: np.ndarray,
         y: np.ndarray,
         X_unl: np.ndarray,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        self.base_estimator.fit(X, y)
-        prob_1 = self.reject_estimator.predict_proba(X_unl)[:, 1]
+        # Wrap before fitting base estimator internally
+        self.base_estimator.fit(self._wrap(X), y)
+        prob_1 = self.reject_estimator.predict_proba(self._wrap(X_unl))[:, 1]
 
         X_concat = np.concatenate([X, X_unl, X_unl])
         y_concat = np.concatenate(
@@ -192,6 +244,14 @@ class FuzzyParcelling(RejectInference):
 
 
 class RejectExtrapolation(RejectInference):
+    """
+    Extrapolation strategy for reject inference.
+    
+    Often called hard cutoff, simple augmentation, or parceling. This strategy 
+    uses a model built on the accepted population to infer the labels of the 
+    rejected samples. The rejected samples with their newly inferred labels are 
+    then combined with the accepted population to train a new model.
+    """
     def __init__(
         self,
         base_estimator: BaseEstimator,
@@ -207,8 +267,9 @@ class RejectExtrapolation(RejectInference):
         y: np.ndarray,
         X_unl: np.ndarray,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        self.base_estimator.fit(X, y)
-        prob_1 = self.reject_estimator.predict_proba(X_unl)[:, 1]
+        # Wrap before fitting base estimator internally
+        self.base_estimator.fit(self._wrap(X), y)
+        prob_1 = self.reject_estimator.predict_proba(self._wrap(X_unl))[:, 1]
         if self.mode == "positive":
             selected = prob_1 > 0.5
         elif self.mode == "all":
@@ -224,6 +285,15 @@ class RejectExtrapolation(RejectInference):
 
 
 class RejectSpreading(RejectInference):
+    """
+    Label Spreading strategy for reject inference.
+    
+    A semi-supervised, graph-based technique assuming nearby samples are likely 
+    to have the same labels. Rejected samples receive a temporary label of -1 
+    and are concatenated with accepted samples. The Label Spreading algorithm is 
+    fitted to this dataset to assign new labels to the rejected samples based on 
+    their localization on the graph.
+    """
     def _preprocess(
         self,
         X: np.ndarray,
@@ -233,8 +303,11 @@ class RejectSpreading(RejectInference):
         X_concat = np.concatenate([X, X_unl])
         y_concat = np.concatenate([y, -1 * np.ones(X_unl.shape[0])])
 
+        # LabelSpreading is purely array-based and usually doesn't throw feature 
+        # names warnings, so standard ndarrays are fine here.
         label_spreading = LabelSpreading(kernel="knn")
         label_spreading.fit(X_concat, y_concat)
+        
         y_new = label_spreading.transduction_
         sample_weights = np.ones(X_concat.shape[0])
         return X_concat, y_new, sample_weights
